@@ -39,4 +39,18 @@ inline vec3 cross(const vec3& u, const vec3& v) {
 }
 inline vec3 unit_vector(const vec3& v) { return v / v.length(); }
 
+class Sphere {
+public:
+	Sphere(vec3 pos, double radius) : pos_(pos), radius_(radius) {}
+	vec3 pos() const { return pos_; }
+	double radius() const { return radius_; }
+private:
+    vec3 pos_;
+    double radius_;
+};
+
+typedef struct {
+    float pos[3];
+} Light;
+
 #endif
