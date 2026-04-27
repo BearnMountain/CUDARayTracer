@@ -9,4 +9,5 @@ CPP_FILES=$(find src -name "*.cpp")
 echo "Compiling: "
 echo -e "\t $CU_FILES $C_FILES $CPP_FILES"
 
-nvcc $CU_FILES $CPP_FILES $C_FILES -o $OUT -O2
+# nvcc $CU_FILES $CPP_FILES $C_FILES -o $OUT -O2
+gcc $CPP_FILES $C_FILES -o $OUT -O2

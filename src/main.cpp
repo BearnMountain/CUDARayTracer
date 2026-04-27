@@ -3,6 +3,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 #include <stdio.h>
+#include <algorithm>
 
 static int BOUNCE_LIMIT;
 static int HEIGHT;
