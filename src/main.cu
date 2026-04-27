@@ -21,24 +21,95 @@ __global__ void hello_kernel() {
 }
 
 // helper
-bool hit_sphere(Sphere* sphere, const ray& r) {
-	// https://kylehalladay.com/blog/tutorial/math/2013/12/24/Ray-Sphere-Intersection.html
-	// simpler version
-    vec3 oc = sphere->pos() - r.getOrigin();
+bool intersect(const Sphere& s, const ray& r, double& t_hit) {
+    vec3 oc = r.getOrigin() - s.pos;
 
-	// quadratic
-    auto a = dot(r.getDirection(), r.getDirection());
-    auto b = 2.0 * dot(r.getDirection(), oc);
-    auto c = dot(oc, oc) - sphere->radius() * sphere->radius();
-    auto discriminant = b*b - 4*a*c; // gives total number of roots/intersections
-    return (discriminant >= 0); 
+    double a = dot(r.getDirection(), r.getDirection());
+    double b = 2.0 * dot(oc, r.getDirection());
+    double c = dot(oc, oc) - s.radius * s.radius;
+
+    double discriminant = b*b - 4*a*c;
+    if (discriminant < 0) return false;
+
+    double sqrtd = std::sqrt(discriminant);
+
+    double t1 = (-b - sqrtd) / (2*a);
+    double t2 = (-b + sqrtd) / (2*a);
+
+    if (t1 > 0) {
+        t_hit = t1;
+        return true;
+    }
+    if (t2 > 0) {
+        t_hit = t2;
+        return true;
+    }
+
+    return false;
 }
 
-Color ray_color(const ray& r) {
-	Sphere sphere(vec3(0,0,-1), 0.5);
-	if (hit_sphere(&sphere, r)) return Color(255,0,0,255);
-	return Color(0,0,0,255);
+bool hit_world(
+    const ray& r,
+    Sphere* spheres,
+    int sphere_count,
+    double& t_min,
+    Sphere*& hit_sphere_out
+) {
+    bool hit_anything = false;
+    t_min = 1e30;
+
+    for (int i = 0; i < sphere_count; i++) {
+        double t;
+        if (intersect(spheres[i], r, t)) {
+            if (t < t_min) {
+                t_min = t;
+                hit_sphere_out = &spheres[i];
+                hit_anything = true;
+            }
+        }
+    }
+
+    return hit_anything;
 }
+
+Color shade(const vec3& hit_point, const vec3& normal, const Light& light, const Color& base_color) {
+    vec3 light_dir = unit_vector(light.pos - hit_point);
+
+    double diff = std::max(0.0, dot(normal, light_dir));
+
+    return Color(base_color.r * diff, base_color.g * diff, base_color.b * diff);
+}
+
+Color ray_color(const ray& r, Sphere* spheres, int sphere_count, const Light& light) {
+
+    double t;
+    Sphere* hit_sphere = nullptr;
+
+    if (hit_world(r, spheres, sphere_count, t, hit_sphere)) {
+
+        vec3 hit_point = r.at(t);
+        vec3 normal = unit_vector(hit_point - hit_sphere->pos);
+
+        return shade(hit_point, normal, light, hit_sphere->color);
+    }
+
+    // background
+    vec3 unit_dir = unit_vector(r.getDirection());
+    double a = 0.5 * (unit_dir.y() + 1.0);
+
+    return (1.0 - a) * Color(255,255,255) + a * Color(122,185,255);
+}
+
+// Color ray_color(const ray& r, spheres, 2, light) {
+// 	Sphere sphere(vec3(0,0,-1), 0.5);
+// 	double root = intersect(sphere, r);
+// 	if (root != -1.0) {
+// 		vec3 norm = unit_vector(r.at(root) - vec3(0,0,-1));
+//         return Color((uint8_t)((norm.x()+1)*122), (uint8_t)((norm.y()+1)*122), (uint8_t)((norm.z()+1)*122), 255);
+// 	}
+//
+// 	return Color(0,0,0,255);
+// }
 
 int main(int argc, char** argv) {
 	BOUNCE_LIMIT = 1;
@@ -46,9 +117,9 @@ int main(int argc, char** argv) {
 	WIDTH = 100;
 	ASPECT_RATIO = double(WIDTH)/HEIGHT;
 
+	vec3 camera_center = vec3(0,0,0); // can move this for different images
 	double viewport_height = 2.0;
 	double viewport_width = viewport_height * ASPECT_RATIO;
-	vec3 camera_center = vec3(0,0,0); // can move this for different images
 
 	// vectors from viewport origin to edges
 	vec3 viewport_x = vec3(viewport_width, 0, 0);
@@ -56,10 +127,13 @@ int main(int argc, char** argv) {
 	vec3 pixel_delta_x = viewport_x / WIDTH;
 	vec3 pixel_delta_y = viewport_y / HEIGHT;
 
-	// drawing scene
-	// Sphere spheres[3];
-	// Color image[HEIGHT * WIDTH];
 
+	// scene objects
+	Sphere spheres[] = {
+		{ vec3(0,0,-1), 0.5, Color(255,0,0) },
+		{ vec3(0, -100.5, -1), 100.0, Color(0,255,0) } // ground
+	};
+	Light light = { vec3(-2,5,0), Color(255,255,255) };
 
 	// render
 	Color image[HEIGHT * WIDTH];
@@ -75,7 +149,7 @@ int main(int argc, char** argv) {
 
 			// creates image based off ray direction
 			ray r(camera_center, ray_direction);
-			image[i * WIDTH + j] = ray_color(r);
+			image[i * WIDTH + j] = ray_color(r, spheres, 2, light);
 		}
 	}
 

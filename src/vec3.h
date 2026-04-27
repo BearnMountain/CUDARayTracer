@@ -2,6 +2,7 @@
 #define VEC3_H_
 
 #include <cmath>
+#include <cstdint>
 
 
 class vec3 {
@@ -39,18 +40,33 @@ inline vec3 cross(const vec3& u, const vec3& v) {
 }
 inline vec3 unit_vector(const vec3& v) { return v / v.length(); }
 
-class Sphere {
+class Color {
 public:
-	Sphere(vec3 pos, double radius) : pos_(pos), radius_(radius) {}
-	vec3 pos() const { return pos_; }
-	double radius() const { return radius_; }
-private:
-    vec3 pos_;
-    double radius_;
+	Color() {}
+	Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a) : r(r), g(g), b(b), a(a) {}
+	Color(uint8_t r, uint8_t g, uint8_t b) : r(r), g(g), b(b), a(255) {}
+	uint8_t r,g,b,a;
 };
 
-typedef struct {
-    float pos[3];
-} Light;
+inline Color operator+(const Color& a, const Color& b) { return Color(a.r + b.r, a.g + b.g, a.b + b.b, a.a); }
+inline Color operator+(const Color& a, double b) { return Color(a.r + b, a.g + b, a.b + b, a.a); }
+inline Color operator+(double b, const Color& a) { return Color(a.r + b, a.g + b, a.b + b, a.a); }
+inline Color operator*(double b, const Color& a) { return Color(a.r * b, a.g * b, a.b * b, a.a * b); }
+inline Color operator*(const Color& a, double b) { return Color(a.r * b, a.g * b, a.b * b, a.a * b); }
+
+class Sphere {
+public:
+	Sphere(vec3 pos, double radius, Color color) : pos(pos), radius(radius), color(color) {}
+    vec3 pos;
+    double radius;
+	Color color;
+};
+
+class Light {
+public:
+	Light(vec3 pos, Color color) : pos(pos), color(color) {}
+	vec3 pos;
+	Color color;
+};
 
 #endif
