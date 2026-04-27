@@ -1,6 +1,5 @@
-#include "ray.h"
 #include "resource_manager.h"
-#include "vec3.h"
+#include "obj.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 #include <stdio.h>
@@ -10,15 +9,15 @@ static int HEIGHT;
 static int WIDTH;
 static double ASPECT_RATIO;
 
-__global__ void hello_kernel() {
-    int x = blockIdx.x * blockDim.x + threadIdx.x;
-    int y = blockIdx.y * blockDim.y + threadIdx.y;
-
-    printf("Hello from block (%d, %d), thread (%d, %d) | global (%d)\n",
-           blockIdx.x, blockIdx.y,
-           threadIdx.x, threadIdx.y,
-           x + y * 1000);
-}
+// __global__ void hello_kernel() {
+//     int x = blockIdx.x * blockDim.x + threadIdx.x;
+//     int y = blockIdx.y * blockDim.y + threadIdx.y;
+//
+//     printf("Hello from block (%d, %d), thread (%d, %d) | global (%d)\n",
+//            blockIdx.x, blockIdx.y,
+//            threadIdx.x, threadIdx.y,
+//            x + y * 1000);
+// }
 
 // helper
 bool intersect(const Sphere& s, const ray& r, double& t_hit) {
@@ -95,9 +94,9 @@ Color ray_color(const ray& r, Sphere* spheres, int sphere_count, const Light& li
 
     // background
     vec3 unit_dir = unit_vector(r.getDirection());
-    double a = 0.5 * (unit_dir.y() + 1.0);
+    double a = 0.5 * (unit_dir.y + 1.0);
 
-    return (1.0 - a) * Color(255,255,255) + a * Color(122,185,255);
+    return (1.0 - a) * Color(1.0, 1.0, 1.0) + a * Color(0.5, 0.7, 1.0);
 }
 
 // Color ray_color(const ray& r, spheres, 2, light) {
@@ -130,10 +129,28 @@ int main(int argc, char** argv) {
 
 	// scene objects
 	Sphere spheres[] = {
-		{ vec3(0,0,-1), 0.5, Color(255,0,0) },
-		{ vec3(0, -100.5, -1), 100.0, Color(0,255,0) } // ground
+
+		// small red sphere (center)
+		{ vec3(0, 0, -1), 0.5, Color(1, 0, 0) },
+
+		// green "ground" sphere
+		{ vec3(0, -100.5, -1), 100.0, Color(0.2, 0.8, 0.2) },
+
+		// blue sphere slightly behind
+		{ vec3(1.0, 0.0, -1.5), 0.5, Color(0.2, 0.3, 1.0) },
+
+		// yellow sphere left side
+		{ vec3(-1.2, 0.1, -0.8), 0.4, Color(1.0, 0.9, 0.2) },
+
+		// small dark sphere far away (tests depth precision)
+		{ vec3(0.0, 0.5, -3.0), 0.3, Color(0.4, 0.4, 0.4) },
+
+		// big overlapping sphere behind everything
+		{ vec3(0.0, 1.0, -2.0), 1.2, Color(0.8, 0.2, 0.6) }
 	};
-	Light light = { vec3(-2,5,0), Color(255,255,255) };
+
+	int sphere_count = sizeof(spheres) / sizeof(Sphere);
+	Light light = { vec3(-2,5,0), Color(1.0, 1.0, 1.0) };
 
 	// render
 	Color image[HEIGHT * WIDTH];
@@ -149,7 +166,7 @@ int main(int argc, char** argv) {
 
 			// creates image based off ray direction
 			ray r(camera_center, ray_direction);
-			image[i * WIDTH + j] = ray_color(r, spheres, 2, light);
+			image[i * WIDTH + j] = ray_color(r, spheres, sphere_count, light);
 		}
 	}
 
