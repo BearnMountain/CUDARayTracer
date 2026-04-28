@@ -5,6 +5,9 @@
 #include <cstdint>
 #include <algorithm>
 
+typedef uint32_t u32;
+typedef int32_t i32;
+
 // header only objects for ray tracing
 // - just link this, no need for cpp file
 

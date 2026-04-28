@@ -10,4 +10,4 @@ echo "Compiling: "
 echo -e "\t $CU_FILES $C_FILES $CPP_FILES"
 
 # nvcc $CU_FILES $CPP_FILES $C_FILES -o $OUT -O2
-gcc $CPP_FILES $C_FILES -o $OUT -O2
+g++ -std=c++17 $CPP_FILES $C_FILES -o $OUT -O2

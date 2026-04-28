@@ -1,101 +1,28 @@
 #include "resource_manager.h"
 #include "obj.h"
+#include "bvh.h"
+
+#include <stdio.h>
+
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+<<<<<<< HEAD
 #include <stdio.h>
 #include <algorithm>
 #include <vector>
 #include <fstream>
 #include <string>
 #include <iostream>
+=======
+>>>>>>> 0dfa31c (added bvh interface, still needs implementation of functions)
 
 static int BOUNCE_LIMIT;
-static int HEIGHT;
-static int WIDTH;
+static int HEIGHT = 450;
+static int WIDTH = 800;
 static double ASPECT_RATIO;
 
-// __global__ void hello_kernel() {
-//     int x = blockIdx.x * blockDim.x + threadIdx.x;
-//     int y = blockIdx.y * blockDim.y + threadIdx.y;
-//
-//     printf("Hello from block (%d, %d), thread (%d, %d) | global (%d)\n",
-//            blockIdx.x, blockIdx.y,
-//            threadIdx.x, threadIdx.y,
-//            x + y * 1000);
-// }
-
-// helper
-bool intersect(const Sphere& s, const ray& r, double& t_hit) {
-    vec3 oc = r.getOrigin() - s.pos;
-
-    double a = dot(r.getDirection(), r.getDirection());
-    double b = 2.0 * dot(oc, r.getDirection());
-    double c = dot(oc, oc) - s.radius * s.radius;
-
-    double discriminant = b*b - 4*a*c;
-    if (discriminant < 0) return false;
-
-    double sqrtd = std::sqrt(discriminant);
-
-    double t1 = (-b - sqrtd) / (2*a);
-    double t2 = (-b + sqrtd) / (2*a);
-
-    if (t1 > 0) {
-        t_hit = t1;
-        return true;
-    }
-    if (t2 > 0) {
-        t_hit = t2;
-        return true;
-    }
-
-    return false;
-}
-
-bool hit_world(const ray& r, Sphere* spheres, int sphere_count, double& t_min, Sphere*& hit_sphere_out) {
-    bool hit_anything = false;
-    t_min = 1e30;
-
-    for (int i = 0; i < sphere_count; i++) {
-        double t;
-        if (intersect(spheres[i], r, t)) {
-            if (t < t_min) {
-                t_min = t;
-                hit_sphere_out = &spheres[i];
-                hit_anything = true;
-            }
-        }
-    }
-
-    return hit_anything;
-}
-
-Color shade(const vec3& hit_point, const vec3& normal, const Light& light, const Color& base_color) {
-    vec3 light_dir = unit_vector(light.pos - hit_point);
-    double diff = std::max(0.0, dot(normal, light_dir));
-    return Color(base_color.r * diff, base_color.g * diff, base_color.b * diff);
-}
-
-Color ray_color(const ray& r, Sphere* spheres, int sphere_count, const Light& light) {
-    double t;
-    Sphere* hit_sphere = nullptr;
-
-    if (hit_world(r, spheres, sphere_count, t, hit_sphere)) {
-
-        vec3 hit_point = r.at(t);
-        vec3 normal = unit_vector(hit_point - hit_sphere->pos);
-
-        return shade(hit_point, normal, light, hit_sphere->color);
-    }
-
-    // background
-    vec3 unit_dir = unit_vector(r.getDirection());
-    double a = 0.5 * (unit_dir.y + 1.0);
-
-    return (1.0 - a) * Color(1.0, 1.0, 1.0) + a * Color(0.5, 0.7, 1.0);
-}
-
 int main(int argc, char** argv) {
+<<<<<<< HEAD
 	HEIGHT = std::stoi(argv[2]);
 	WIDTH = std::stoi(argv[3]);
     BOUNCE_LIMIT = std::stoi(argv[4]);
@@ -146,22 +73,71 @@ int main(int argc, char** argv) {
             }
         }
     }
+=======
+	BOUNCE_LIMIT = 10;
+	ASPECT_RATIO = double(WIDTH)/HEIGHT;
+
+	// TODO: remove arbitrary spherse and replace with read_scene_file
+	std::vector<Sphere> scene = {
+		{ {0.0,  0.0, -5.0}, 1.0, {1.0, 0.2, 0.2} }, // red
+		{ {2.5,  0.0, -5.0}, 0.8, {0.2, 1.0, 0.2} }, // green
+		{ {-2.5, 0.0, -5.0}, 1.2, {0.2, 0.2, 1.0} }, // blue
+		{ {0.0,  2.0, -4.5}, 0.6, {1.0, 1.0, 0.2} }, // yellow
+		{ {0.0, -1001.0, -5.0}, 1000.0, {0.8, 0.8, 0.8} }, // ground plane (huge sphere)
+	};
+	BVH bvh(scene);
+
+	vec3 camera{0,0,0}; // can move this for different images
+	vec3 light = vec3{0.6, 1.0, 0.4}.norm();
+>>>>>>> 0dfa31c (added bvh interface, still needs implementation of functions)
 
 	// render
-	Color image[HEIGHT * WIDTH];
+	std::vector<vec3> image(HEIGHT * WIDTH);
 
-	printf("%d\n", BOUNCE_LIMIT);
-
-	vec3 viewport_start = camera_center - vec3(0,0,1.0) - viewport_x/2 - viewport_y/2; // gets 0,0 for render
-	vec3 start_pixel_center = viewport_start + 0.5 * (pixel_delta_x + pixel_delta_y); // gets center of starting pixel for ray
-	for (int i = 0; i < HEIGHT; i++) {
+	for (int i = 0; i < HEIGHT; i++) { 
 		for (int j = 0; j < WIDTH; j++) {
-			vec3 pixel_center = start_pixel_center + (j * pixel_delta_x) + (i * pixel_delta_y);
-			vec3 ray_direction = pixel_center - camera_center;
+			// normalized center of pixel 
+			double u = (j + 0.5) / WIDTH * 2.0 - 1.0;
+			double v = -((i + 0.5) / HEIGHT * 2.0 - 1.0); // flip image rightside up
+
+			Ray ray(camera, vec3{u * ASPECT_RATIO, v, -1.0});
+			vec3 pixel{0,0,0};
+			vec3 ray_intensity{1,1,1};
+			Ray bounce_ray = ray;
+
+			for (int b = 0; b < BOUNCE_LIMIT; ++b) {
+				auto hit = bvh.intersect(bounce_ray);
+
+				if (!hit) {
+					// misses sphere, sets default color
+					vec3 sky{0.05, 0.05, 0.12};
+					pixel = pixel + ray_intensity * sky;
+					break;
+				}
+
+				// Direct light contribution at this bounce
+				double diff = std::max(0.0, hit->normal.dot(light));
+				vec3 emitted = hit->color * (0.15 + 0.85 * diff);
+				pixel = pixel + ray_intensity * emitted;  // accumulate
+
+				// diffuse albedo: tints reflected light
+				ray_intensity = ray_intensity * hit->color;
+
+				// updates ray with direct reflection
+				vec3 reflected = bounce_ray.dir - hit->normal * 2.0 * bounce_ray.dir.dot(hit->normal);
+				bounce_ray = Ray(hit->point, reflected);
+
+				// intensity cutoff to stop at a point
+				if (std::max({ray_intensity.x, ray_intensity.y, ray_intensity.z}) < 0.01) break;
+			}
 
 			// creates image based off ray direction
+<<<<<<< HEAD
 			ray r(camera_center, ray_direction);
 			image[i * WIDTH + j] = ray_color(r, spheres.data(), spheres.size(), lights.front());
+=======
+			image[i * WIDTH + j] = pixel;
+>>>>>>> 0dfa31c (added bvh interface, still needs implementation of functions)
 		}
 	}
 
