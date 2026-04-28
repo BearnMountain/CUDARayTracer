@@ -116,9 +116,9 @@ Color ray_color(const ray& r, Sphere* spheres, int sphere_count, const Light& li
 // }
 
 int main(int argc, char** argv) {
-	BOUNCE_LIMIT = 1;
 	HEIGHT = std::stoi(argv[2]);
 	WIDTH = std::stoi(argv[3]);
+    BOUNCE_LIMIT = std::stoi(argv[4]);
 	ASPECT_RATIO = double(WIDTH)/HEIGHT;
 
 	vec3 camera_center = vec3(0,0,0); // can move this for different images
