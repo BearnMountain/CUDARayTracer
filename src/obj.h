@@ -69,8 +69,6 @@ struct AABB {
 
     // only spheres, grow to enclose them
     void expand(const Sphere& s) { vec3 r{s.radius, s.radius, s.radius}; min = vec3::min(min, s.pos - r); max = vec3::max(max, s.pos + r); }
-
-	// merges two aabb
     void expand(const AABB& o) { min = vec3::min(min, o.min); max = vec3::max(max, o.max); }
 
     vec3 center() const { return (min + max) / 2.0; }
@@ -82,11 +80,11 @@ struct AABB {
     int longest_axis() const {
         vec3 e = extent();
         if (e.x >= e.y && e.x >= e.z) return 0;
-        if (e.y >= e.z)                return 1;
+        if (e.y >= e.z) return 1;
         return 2;
     }
 
-    //  returns true if ray hits in [t_min, t_max]
+    // returns true if ray hits in [t_min, t_max]
 	// SLAB TEST: https://tavianator.com/2022/ray_box_boundary.html
     bool intersect(const Ray& ray, double t_min, double t_max) const {
         for (int i = 0; i < 3; ++i) {

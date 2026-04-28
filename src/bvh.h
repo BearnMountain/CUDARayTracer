@@ -17,13 +17,13 @@ public:
 	};
 
 	BVH(std::vector<Sphere> spheres);
-	std::optional<Hit> intersect(const Ray& ray, double t_min = std::numeric_limits<double>::min()) const;
+	std::optional<Hit> intersect(const Ray& ray, double t_min = 1e-4, double t_max = std::numeric_limits<double>::max()) const;
 	const std::vector<Sphere>& spheres() const { return spheres_; }
 	const std::vector<Node>& nodes() const { return nodes_; }
 
 private:
 	std::vector<Sphere> spheres_;
-	std::vector<uint32_t> sphere_indices_;
+	std::vector<uint32_t> sphere_indices_; // all spheres stored in static array for easier access
 	std::vector<AABB> sphere_aabbs_;
 	std::vector<vec3> centroids_;
 	std::vector<Node> nodes_;
