@@ -2,78 +2,65 @@
 #include "obj.h"
 #include "bvh.h"
 
-#include <stdio.h>
-
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
-<<<<<<< HEAD
+
 #include <stdio.h>
 #include <algorithm>
 #include <vector>
-#include <fstream>
-#include <string>
-#include <iostream>
-=======
->>>>>>> 0dfa31c (added bvh interface, still needs implementation of functions)
+#include <mpi.h>
 
-static int BOUNCE_LIMIT;
-static int HEIGHT = 450;
-static int WIDTH = 800;
-static double ASPECT_RATIO;
+static __inline__ ticks getticks(void) {
+    unsigned int tbl, tbu0, tbu1;
+    do {
+        __asm__ __volatile__ ("mftbu %0" : "=r"(tbu0));
+        __asm__ __volatile__ ("mftb %0" : "=r"(tbl));
+        __asm__ __volatile__ ("mftbu %0" : "=r"(tbu1));
+    } while (tbu0 != tbu1);
+    return (((unsigned long long)tbu0) << 32) | tbl;
+}
+
+// shared globals
+static u32 bounce_limit;
+static u32 image_height;
+static u32 image_width;
+BVH* bvh;
+
 
 int main(int argc, char** argv) {
-<<<<<<< HEAD
-	HEIGHT = std::stoi(argv[2]);
-	WIDTH = std::stoi(argv[3]);
-    BOUNCE_LIMIT = std::stoi(argv[4]);
-	ASPECT_RATIO = double(WIDTH)/HEIGHT;
+	// MPI intialization
+	MPI_Init(&argc, &argv);
+	u32 world_size, world_rank;
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
-	vec3 camera_center = vec3(0,0,0); // can move this for different images
-	double viewport_height = 2.0;
-	double viewport_width = viewport_height * ASPECT_RATIO;
+	if (argc != 5) {
+		if (world_rank == 0) fprintf(stderr, "Requires ./exe width height bounce_limit filepath");
+		MPI_Finalize();
+		return 1;
+	}
 
-	// vectors from viewport origin to edges
-	vec3 viewport_x = vec3(viewport_width, 0, 0);
-	vec3 viewport_y = vec3(0, -viewport_height, 0);
-	vec3 pixel_delta_x = viewport_x / WIDTH;
-	vec3 pixel_delta_y = viewport_y / HEIGHT;
+	// args
+	image_width = atoi(argv[1]);
+	image_height = atoi(argv[2]);
+	bounce_limit = atoi(argv[3]);
+	char* file_path = argv[4];
 
-    // parse input
-    std::vector<Sphere> spheres;
-    std::vector<Light> lights;
-    {
-        std::ifstream istr(argv[1]);
-        std::string buf;
-        while (istr >> buf) {
-            if (buf == "LIGHT") {
-                float x, y, z;
-                float r, g, b;
-                istr >> x >> y >> z >> r >> g >> b;
+	// TODO: replace with write_scene_file so that it takes file and writes the scene
+	std::vector<Sphere> scene = {
+		{ {0.0,  0.0, -5.0}, 1.0, {1.0, 0.2, 0.2} }, // red
+		{ {2.5,  0.0, -5.0}, 0.8, {0.2, 1.0, 0.2} }, // green
+		{ {-2.5, 0.0, -5.0}, 1.2, {0.2, 0.2, 1.0} }, // blue
+		{ {0.0,  2.0, -4.5}, 0.6, {1.0, 1.0, 0.2} }, // yellow
+		{ {0.0, -1001.0, -5.0}, 1000.0, {0.8, 0.8, 0.8} }, // ground plane (huge sphere)
+	};
+	
 
-<<<<<<< HEAD
-                vec3 pos = { x, y, z };
-                Color col = { r, g, b };
-                lights.emplace_back(pos, col);
-            } else if (buf == "SPHERE") {
-                float x, y, z;
-                float radius;
-                float r, g, b;
-                istr >> x >> y >> z >> radius >> r >> g >> b;
-=======
-	// scene objects, replace with general file.txt
-	Sphere spheres[] = {
->>>>>>> e470338 (changes to obj file for bvh and aabb intersection method)
+	return 0;
+}
 
-                vec3 pos = { x, y, z };
-                Color col = { r, g, b };
-                spheres.emplace_back(pos, radius, col);
-            } else {
-                std::cerr << "ERROR: invalid code in file " << argv[1] << "\n";
-                return EXIT_FAILURE;
-            }
-        }
-    }
-=======
+#if 0
+int main(int argc, char** argv) {
 	BOUNCE_LIMIT = 10;
 	ASPECT_RATIO = double(WIDTH)/HEIGHT;
 
@@ -85,11 +72,10 @@ int main(int argc, char** argv) {
 		{ {0.0,  2.0, -4.5}, 0.6, {1.0, 1.0, 0.2} }, // yellow
 		{ {0.0, -1001.0, -5.0}, 1000.0, {0.8, 0.8, 0.8} }, // ground plane (huge sphere)
 	};
-	BVH bvh(scene);
+	bvh = new BVH(scene);
 
 	vec3 camera{0,0,0}; // can move this for different images
 	vec3 light = vec3{0.6, 1.0, 0.4}.norm();
->>>>>>> 0dfa31c (added bvh interface, still needs implementation of functions)
 
 	// render
 	std::vector<vec3> image(HEIGHT * WIDTH);
@@ -132,12 +118,7 @@ int main(int argc, char** argv) {
 			}
 
 			// creates image based off ray direction
-<<<<<<< HEAD
-			ray r(camera_center, ray_direction);
-			image[i * WIDTH + j] = ray_color(r, spheres.data(), spheres.size(), lights.front());
-=======
 			image[i * WIDTH + j] = pixel;
->>>>>>> 0dfa31c (added bvh interface, still needs implementation of functions)
 		}
 	}
 
@@ -145,3 +126,4 @@ int main(int argc, char** argv) {
 
     return 0;
 }
+#endif
