@@ -3,79 +3,108 @@
 
 #include <cmath>
 #include <cstdint>
+#include <algorithm>
 
-// VEC
-class vec3 {
-public:
-	vec3() : x(0), y(0), z(0) {} 
-	vec3(double x, double y, double z) : x(x), y(y), z(z) {}
-	double x,y,z;
+// header only objects for ray tracing
+// - just link this, no need for cpp file
 
-	vec3& operator +=(const vec3& v) { x += v.x; y += v.y; z += v.z; return *this; }
-	vec3& operator -=(const vec3& v) { x -= v.x; y -= v.y; z -= v.z; return *this; }
-	vec3& operator *=(double v) { x *= v; y *= v; z *= v; return *this; }
-	vec3& operator /=(double v) { return *this *= 1/v; }
-};
+typedef struct vec3 {
+    double x = 0, y = 0, z = 0;
 
-inline vec3 operator+(const vec3& u, const vec3& v) { return vec3(u.x + v.x, u.y + v.y, u.z + v.z); }
-inline vec3 operator-(const vec3& u, const vec3& v) { return vec3(u.x - v.x, u.y - v.y, u.z - v.z); }
-inline vec3 operator*(const vec3& u, const vec3& v) { return vec3(u.x * v.x, u.y * v.y, u.z * v.z); }
-inline vec3 operator*(double t, const vec3& v) { return vec3(t * v.x, t * v.y, t * v.z); }
-inline vec3 operator*(const vec3& v, double t) { return t * v; }
-inline vec3 operator/(const vec3& v, double t) { return (1/t) * v; }
-inline double dot(const vec3& u, const vec3& v) { return u.x * v.x + u.y * v.y + u.z * v.z; }
-inline vec3 cross(const vec3& u, const vec3& v) { return vec3(u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x); }
-inline double length(const vec3& v) { return std::sqrt(v.x*v.x + v.y*v.y + v.z*v.z); }
-inline vec3 unit_vector(const vec3& v) { return v / length(v); }
+	// matrix algebra
+    vec3 operator+(vec3 a) const { return {x+a.x, y+a.y, z+a.z}; }
+    vec3 operator-(vec3 a) const { return {x-a.x, y-a.y, z-a.z}; }
+    vec3 operator*(double t) const { return {x*t, y*t, z*t}; }
+	vec3 operator*(vec3 a) const { return {x*a.x, y*a.y, z*a.z}; }
+    vec3 operator/(double t) const { return {x/t, y/t, z/t}; }
 
-// COLOR
-class Color {
-public:
-	Color() {}
-	Color(double r, double g, double b) : r(r), g(g), b(b) {}
-	double r,g,b;
-};
+    double dot(vec3 a) const { return x*a.x + y*a.y + z*a.z; }
+    double length(void) const { return std::sqrt(dot(*this)); }
+    vec3 norm(void) const { return *this / length(); }
 
-inline Color operator+(const Color& a, const Color& b) { return Color(a.r + b.r, a.g + b.g, a.b + b.b); }
-inline Color operator+(const Color& a, double b) { return Color(a.r + b, a.g + b, a.b + b); }
-inline Color operator+(double b, const Color& a) { return Color(a.r + b, a.g + b, a.b + b); }
-inline Color operator*(const Color& a, const Color& b) { return Color(a.r * b.r, a.g * b.g, a.b * b.b); }
-inline Color operator*(double b, const Color& a) { return Color(a.r * b, a.g * b, a.b * b); }
-inline Color operator*(const Color& a, double b) { return Color(a.r * b, a.g * b, a.b * b); }
+    double operator[](int i) const { return (&x)[i]; }
+    double& operator[](int i) { return (&x)[i]; }
 
-// SPHERE
-class Sphere {
-public:
-	Sphere(vec3 pos, double radius, Color color) : pos(pos), radius(radius), color(color) {}
-    vec3 pos;
+    static vec3 min(vec3 a, vec3 b) { return (vec3){ std::min(a.x,b.x), std::min(a.y,b.y), std::min(a.z,b.z)}; }
+    static vec3 max(vec3 a, vec3 b) { return (vec3){ std::max(a.x,b.x), std::max(a.y,b.y), std::max(a.z,b.z)}; }
+} vec3;
+
+typedef struct {
+    vec3   pos;
     double radius;
-	Color color;
+    vec3   color;
+} Sphere;
+
+
+typedef struct Ray {
+    vec3 origin, dir; 
+    vec3 inverse_dir; // precompute for AABB (b-o) * inverse_dir
+
+    Ray(vec3 origin, vec3 dir) : origin(origin), dir(dir.norm()), 
+		inverse_dir{
+			1.0/dir.norm().x, 
+			1.0/dir.norm().y, 
+			1.0/dir.norm().z
+		}
+    {}
+
+    vec3 at(double t) const { return origin + dir * t; }
+} Ray;
+
+struct AABB {
+    vec3 min{ 
+		std::numeric_limits<double>::max(),
+		std::numeric_limits<double>::max(),
+		std::numeric_limits<double>::max() 
+	};
+
+    vec3 max{ 
+		std::numeric_limits<double>::lowest(),
+		std::numeric_limits<double>::lowest(),
+		std::numeric_limits<double>::lowest() 
+	};
+
+    // only spheres, grow to enclose them
+    void expand(const Sphere& s) { vec3 r{s.radius, s.radius, s.radius}; min = vec3::min(min, s.pos - r); max = vec3::max(max, s.pos + r); }
+
+	// merges two aabb
+    void expand(const AABB& o) { min = vec3::min(min, o.min); max = vec3::max(max, o.max); }
+
+    vec3 center() const { return (min + max) / 2.0; }
+    vec3 extent() const { return max - min; }
+    double surface_area() const {
+        vec3 e = extent();
+        return 2.0 * (e.x*e.y + e.y*e.z + e.z*e.x);
+    }
+    int longest_axis() const {
+        vec3 e = extent();
+        if (e.x >= e.y && e.x >= e.z) return 0;
+        if (e.y >= e.z)                return 1;
+        return 2;
+    }
+
+    //  returns true if ray hits in [t_min, t_max]
+	// SLAB TEST: https://tavianator.com/2022/ray_box_boundary.html
+    bool intersect(const Ray& ray, double t_min, double t_max) const {
+        for (int i = 0; i < 3; ++i) {
+            double inv = ray.inverse_dir[i];
+            double t0  = (min[i] - ray.origin[i]) * inv;
+            double t1  = (max[i] - ray.origin[i]) * inv;
+            if (inv < 0.0) std::swap(t0, t1);
+            t_min = std::max(t_min, t0);
+            t_max = std::min(t_max, t1);
+            if (t_max <= t_min) return false;
+        }
+        return true;
+    }
 };
 
-// LIGHT
-class Light {
-public:
-	Light(vec3 pos, Color color) : pos(pos), color(color) {}
-	vec3 pos;
-	Color color;
-};
-
-// RAY
-class ray {
-public:
-	ray() {}
-	ray(const vec3& origin, const vec3& direction) : origin(origin), direction(direction) {}
-
-	const vec3& getOrigin() const { return origin; }
-	const vec3& getDirection() const { return direction; }
-
-	vec3 at(double t) const { return t * direction + origin; }
-
-private:
-	vec3 origin;
-	vec3 direction;
-};
-
-
+typedef struct {
+    double t; // ray parameter
+    vec3 point; // hit position
+    vec3 normal;
+    vec3 color;
+    uint32_t sphere_idx;
+} Hit;
 
 #endif

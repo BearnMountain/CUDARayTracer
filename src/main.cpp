@@ -52,13 +52,7 @@ bool intersect(const Sphere& s, const ray& r, double& t_hit) {
     return false;
 }
 
-bool hit_world(
-    const ray& r,
-    Sphere* spheres,
-    int sphere_count,
-    double& t_min,
-    Sphere*& hit_sphere_out
-) {
+bool hit_world(const ray& r, Sphere* spheres, int sphere_count, double& t_min, Sphere*& hit_sphere_out) {
     bool hit_anything = false;
     t_min = 1e30;
 
@@ -78,14 +72,11 @@ bool hit_world(
 
 Color shade(const vec3& hit_point, const vec3& normal, const Light& light, const Color& base_color) {
     vec3 light_dir = unit_vector(light.pos - hit_point);
-
     double diff = std::max(0.0, dot(normal, light_dir));
-
     return Color(base_color.r * diff, base_color.g * diff, base_color.b * diff);
 }
 
 Color ray_color(const ray& r, Sphere* spheres, int sphere_count, const Light& light) {
-
     double t;
     Sphere* hit_sphere = nullptr;
 
@@ -103,17 +94,6 @@ Color ray_color(const ray& r, Sphere* spheres, int sphere_count, const Light& li
 
     return (1.0 - a) * Color(1.0, 1.0, 1.0) + a * Color(0.5, 0.7, 1.0);
 }
-
-// Color ray_color(const ray& r, spheres, 2, light) {
-// 	Sphere sphere(vec3(0,0,-1), 0.5);
-// 	double root = intersect(sphere, r);
-// 	if (root != -1.0) {
-// 		vec3 norm = unit_vector(r.at(root) - vec3(0,0,-1));
-//         return Color((uint8_t)((norm.x()+1)*122), (uint8_t)((norm.y()+1)*122), (uint8_t)((norm.z()+1)*122), 255);
-// 	}
-//
-// 	return Color(0,0,0,255);
-// }
 
 int main(int argc, char** argv) {
 	HEIGHT = std::stoi(argv[2]);
@@ -143,6 +123,7 @@ int main(int argc, char** argv) {
                 float r, g, b;
                 istr >> x >> y >> z >> r >> g >> b;
 
+<<<<<<< HEAD
                 vec3 pos = { x, y, z };
                 Color col = { r, g, b };
                 lights.emplace_back(pos, col);
@@ -151,6 +132,10 @@ int main(int argc, char** argv) {
                 float radius;
                 float r, g, b;
                 istr >> x >> y >> z >> radius >> r >> g >> b;
+=======
+	// scene objects, replace with general file.txt
+	Sphere spheres[] = {
+>>>>>>> e470338 (changes to obj file for bvh and aabb intersection method)
 
                 vec3 pos = { x, y, z };
                 Color col = { r, g, b };
