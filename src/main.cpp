@@ -46,18 +46,9 @@ int main(int argc, char** argv) {
 	bounce_limit = atoi(argv[3]);
 	char* file_path = argv[4];
 
-	// TODO: replace with write_scene_file so that it takes file and writes the scene
-	std::vector<Sphere> scene = {
-		{ {0.0,  0.0, -5.0}, 1.0, {1.0, 0.2, 0.2} }, // red
-		{ {2.5,  0.0, -5.0}, 0.8, {0.2, 1.0, 0.2} }, // green
-		{ {-2.5, 0.0, -5.0}, 1.2, {0.2, 0.2, 1.0} }, // blue
-		{ {0.0,  2.0, -4.5}, 0.6, {1.0, 1.0, 0.2} }, // yellow
-		{ {0.0, -1001.0, -5.0}, 1000.0, {0.8, 0.8, 0.8} }, // ground plane (huge sphere)
-	};
-	vec3 camera{0,0,0}; // can move this for different images
-	std::vector<vec3>  light_sources = {
-		{ vec3{0.6, 1.0, 0.4}.norm() }
-	};
+	std::vector<Sphere> scene;
+	std::vector<vec3> lights;
+	read_scene_file(file_path, scene, lights);
 
 	// initialize the bvh
 	BVH cpu_bvh(scene);
@@ -73,6 +64,7 @@ int main(int argc, char** argv) {
 
 	// RUN CUDA
     run_parallel_kernel(&cpu_bvh,
+						lights.front(); // TODO: pass n lights
                         local_image.data(),
                         local_rows,
                         row_start,       // FIX: was row_offset undefined; use row_start

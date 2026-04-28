@@ -5,6 +5,7 @@
 
 // ─── device-side BVH pointer (set once via cudaMemcpyToSymbol) ───────────────
 __device__ BVH* d_bvh;
+__device__ vec3 light; // TODO: take n lights
 
 // ─── Sky colour for rays that escape the scene ───────────────────────────────
 __device__ __forceinline__ vec3 sky_colour() {
@@ -44,7 +45,6 @@ __global__ void ray_kernel(
     double v = -((abs_row  + 0.5) / full_height * 2.0 - 1.0); // flip Y
 
     vec3 camera{0.0, 0.0, 0.0};
-    vec3 light = vec3{0.6, 1.0, 0.4}.norm();
 
     Ray   bounce_ray(camera, vec3{u * aspect_ratio, v, -1.0});
     vec3  pixel{0.0, 0.0, 0.0};
@@ -89,6 +89,7 @@ __global__ void ray_kernel(
 void launch_parallel_ray(
     BVH*   host_bvh,
     vec3*  out_pixels,
+    vec3   cpu_light; // TODO: take n lights
     u32    width,
     u32    full_height,
     u32    local_height,
@@ -100,6 +101,8 @@ void launch_parallel_ray(
     cudaMalloc(&d_bvh_ptr, sizeof(BVH));
     cudaMemcpy(d_bvh_ptr, host_bvh, sizeof(BVH), cudaMemcpyHostToDevice);
     cudaMemcpyToSymbol(d_bvh, &d_bvh_ptr, sizeof(BVH*));
+
+    light = cpu_light; // TODO: take n lights
 
     // ── 2. Allocate pixel buffer on device ───────────────────────────────
     vec3* d_pixels;
