@@ -2,7 +2,5 @@ build/
 /.vs
 
 exe
-scene*
-
 *.out
 *.png
