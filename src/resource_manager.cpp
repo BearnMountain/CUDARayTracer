@@ -4,13 +4,31 @@
 #include <stdio.h>
 #include "obj.h"
 #include <algorithm>
+#include <fstream>
+#include <iostream>
 
-void parse_scene_file(const char* path, Sphere* spheres, int* sphere_size, vec3* lights, int* light_size) {
-	// file format:
-	// LIGHT x y z r g b
-	FILE* file = fopen(path, "r");
+void read_scene_file(const char* path, std::vector<Sphere>& spheres, std::vector<vec3>& lights) {
+    std::ifstream istr(path);
+    std::string buf;
+    while (istr >> buf) {
+        if (buf == "LIGHT") {
+            double x, y, z;
+            istr >> x >> y >> z;
+            lights.emplace_back() = vec3{ x, y, z }.norm();
+        } else if (buf == "SPHERE") {
+            double x, y, z;
+            double radius;
+            double r, g, b;
+            istr >> x >> y >> z >> radius >> r >> g >> b;
 
-	fclose(file);
+            vec3 pos = { x, y, z };
+            vec3 col = { r, g, b };
+            spheres.emplace_back() = { pos, radius, col };
+        } else {
+            std::cerr << "ERROR: invalid code in input file\n";
+            abort();
+        }
+    }
 }
 
 

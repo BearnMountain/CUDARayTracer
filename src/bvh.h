@@ -5,6 +5,8 @@
 #include <numeric>
 #include <vector>
 #include <algorithm>
+#include <optional>
+#include <array>
 
 class BVH {
 public:

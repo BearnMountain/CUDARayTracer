@@ -11,7 +11,7 @@ typedef int32_t i32;
 // header only objects for ray tracing
 // - just link this, no need for cpp file
 
-typedef struct vec3 {
+struct vec3 {
     double x = 0, y = 0, z = 0;
 
 	// matrix algebra
@@ -30,13 +30,13 @@ typedef struct vec3 {
 
     static vec3 min(vec3 a, vec3 b) { return (vec3){ std::min(a.x,b.x), std::min(a.y,b.y), std::min(a.z,b.z)}; }
     static vec3 max(vec3 a, vec3 b) { return (vec3){ std::max(a.x,b.x), std::max(a.y,b.y), std::max(a.z,b.z)}; }
-} vec3;
+};
 
-typedef struct {
+struct Sphere {
     vec3   pos;
     double radius;
     vec3   color;
-} Sphere;
+};
 
 
 typedef struct Ray {

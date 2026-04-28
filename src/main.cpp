@@ -10,6 +10,7 @@
 #include <vector>
 #include <mpi.h>
 
+using ticks = unsigned long;
 static __inline__ ticks getticks(void) {
     unsigned int tbl, tbu0, tbu1;
     do {
@@ -60,22 +61,25 @@ int main(int argc, char** argv) {
 }
 
 #if 0
+
+int BOUNCE_LIMIT;
+int WIDTH = 1000;
+int HEIGHT = 1000;
+float ASPECT_RATIO;
+
 int main(int argc, char** argv) {
-	BOUNCE_LIMIT = 10;
+	WIDTH = atoi(argv[1]);
+	HEIGHT = atoi(argv[2]);
+	BOUNCE_LIMIT = atoi(argv[3]);
 	ASPECT_RATIO = double(WIDTH)/HEIGHT;
 
-	// TODO: remove arbitrary spherse and replace with read_scene_file
-	std::vector<Sphere> scene = {
-		{ {0.0,  0.0, -5.0}, 1.0, {1.0, 0.2, 0.2} }, // red
-		{ {2.5,  0.0, -5.0}, 0.8, {0.2, 1.0, 0.2} }, // green
-		{ {-2.5, 0.0, -5.0}, 1.2, {0.2, 0.2, 1.0} }, // blue
-		{ {0.0,  2.0, -4.5}, 0.6, {1.0, 1.0, 0.2} }, // yellow
-		{ {0.0, -1001.0, -5.0}, 1000.0, {0.8, 0.8, 0.8} }, // ground plane (huge sphere)
-	};
+	std::vector<Sphere> scene;
+	std::vector<vec3> lights;
+	read_scene_file(argv[4], scene, lights);
+
 	bvh = new BVH(scene);
 
 	vec3 camera{0,0,0}; // can move this for different images
-	vec3 light = vec3{0.6, 1.0, 0.4}.norm();
 
 	// render
 	std::vector<vec3> image(HEIGHT * WIDTH);
@@ -92,7 +96,7 @@ int main(int argc, char** argv) {
 			Ray bounce_ray = ray;
 
 			for (int b = 0; b < BOUNCE_LIMIT; ++b) {
-				auto hit = bvh.intersect(bounce_ray);
+				auto hit = bvh->intersect(bounce_ray);
 
 				if (!hit) {
 					// misses sphere, sets default color
@@ -102,7 +106,7 @@ int main(int argc, char** argv) {
 				}
 
 				// Direct light contribution at this bounce
-				double diff = std::max(0.0, hit->normal.dot(light));
+				double diff = std::max(0.0, hit->normal.dot(lights.front()));
 				vec3 emitted = hit->color * (0.15 + 0.85 * diff);
 				pixel = pixel + ray_intensity * emitted;  // accumulate
 
