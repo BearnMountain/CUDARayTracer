@@ -4,6 +4,10 @@
 #include "stb_image_write.h"
 #include <stdio.h>
 #include <algorithm>
+#include <vector>
+#include <fstream>
+#include <string>
+#include <iostream>
 
 static int BOUNCE_LIMIT;
 static int HEIGHT;
@@ -113,8 +117,8 @@ Color ray_color(const ray& r, Sphere* spheres, int sphere_count, const Light& li
 
 int main(int argc, char** argv) {
 	BOUNCE_LIMIT = 1;
-	HEIGHT = 100;
-	WIDTH = 100;
+	HEIGHT = std::stoi(argv[2]);
+	WIDTH = std::stoi(argv[3]);
 	ASPECT_RATIO = double(WIDTH)/HEIGHT;
 
 	vec3 camera_center = vec3(0,0,0); // can move this for different images
@@ -127,31 +131,36 @@ int main(int argc, char** argv) {
 	vec3 pixel_delta_x = viewport_x / WIDTH;
 	vec3 pixel_delta_y = viewport_y / HEIGHT;
 
+    // parse input
+    std::vector<Sphere> spheres;
+    std::vector<Light> lights;
+    {
+        std::ifstream istr(argv[1]);
+        char code = ' ';
+        while (istr >> code) {
+            if (code == 'L') {
+                float x, y, z;
+                float r, g, b;
+                istr >> x >> y >> z >> r >> g >> b;
 
-	// scene objects
-	Sphere spheres[] = {
+                vec3 pos = { x, y, z };
+                Color col = { r, g, b };
+                lights.emplace_back(pos, col);
+            } else if (code == 'S') {
+                float x, y, z;
+                float radius;
+                float r, g, b;
+                istr >> x >> y >> z >> radius >> r >> g >> b;
 
-		// small red sphere (center)
-		{ vec3(0, 0, -1), 0.5, Color(1, 0, 0) },
-
-		// green "ground" sphere
-		{ vec3(0, -100.5, -1), 100.0, Color(0.2, 0.8, 0.2) },
-
-		// blue sphere slightly behind
-		{ vec3(1.0, 0.0, -1.5), 0.5, Color(0.2, 0.3, 1.0) },
-
-		// yellow sphere left side
-		{ vec3(-1.2, 0.1, -0.8), 0.4, Color(1.0, 0.9, 0.2) },
-
-		// small dark sphere far away (tests depth precision)
-		{ vec3(0.0, 0.5, -3.0), 0.3, Color(0.4, 0.4, 0.4) },
-
-		// big overlapping sphere behind everything
-		{ vec3(0.0, 1.0, -2.0), 1.2, Color(0.8, 0.2, 0.6) }
-	};
-
-	int sphere_count = sizeof(spheres) / sizeof(Sphere);
-	Light light = { vec3(-2,5,0), Color(1.0, 1.0, 1.0) };
+                vec3 pos = { x, y, z };
+                Color col = { r, g, b };
+                spheres.emplace_back(pos, radius, col);
+            } else {
+                std::cerr << "ERROR: invalid code in file " << argv[1] << "\n";
+                return EXIT_FAILURE;
+            }
+        }
+    }
 
 	// render
 	Color image[HEIGHT * WIDTH];
@@ -167,7 +176,7 @@ int main(int argc, char** argv) {
 
 			// creates image based off ray direction
 			ray r(camera_center, ray_direction);
-			image[i * WIDTH + j] = ray_color(r, spheres, sphere_count, light);
+			image[i * WIDTH + j] = ray_color(r, spheres.data(), spheres.size(), lights.front());
 		}
 	}
 
