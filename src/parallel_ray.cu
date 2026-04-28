@@ -1,8 +1,7 @@
 #pragma once
 #include <cuda_runtime.h>
-#include "vec3.h"   // your vec3 type
+#include "obj.h"   // your vec3 type
 #include "bvh.h"    // your BVH / HitRecord types
-#include "ray.h"    // your Ray type
 
 // ─── device-side BVH pointer (set once via cudaMemcpyToSymbol) ───────────────
 __device__ BVH* d_bvh;
