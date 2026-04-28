@@ -1,6 +1,7 @@
 #include "resource_manager.h"
 #include "obj.h"
 #include "bvh.h"
+#include "parallel_ray.cu"	
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -25,18 +26,16 @@ static __inline__ ticks getticks(void) {
 static u32 bounce_limit;
 static u32 image_height;
 static u32 image_width;
-BVH* bvh;
-
 
 int main(int argc, char** argv) {
 	// MPI intialization
 	MPI_Init(&argc, &argv);
-	u32 world_size, world_rank;
+	i32 world_size, world_rank;
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
 	if (argc != 5) {
-		if (world_rank == 0) fprintf(stderr, "Requires ./exe width height bounce_limit filepath");
+		if (world_rank == 0) fprintf(stderr, "Requires ./exe width height bounce_limit filepath\n");
 		MPI_Finalize();
 		return 1;
 	}
@@ -55,7 +54,79 @@ int main(int argc, char** argv) {
 		{ {0.0,  2.0, -4.5}, 0.6, {1.0, 1.0, 0.2} }, // yellow
 		{ {0.0, -1001.0, -5.0}, 1000.0, {0.8, 0.8, 0.8} }, // ground plane (huge sphere)
 	};
+	vec3 camera{0,0,0}; // can move this for different images
+	std::vector<vec3>  light_sources = {
+		{ vec3{0.6, 1.0, 0.4}.norm() }
+	};
+
+	// initialize the bvh
+	BVH cpu_bvh(scene);
+
+	// partition rows across ranks(easier than partitioning collumns)
+    u32 base = image_height / world_size;
+    u32 remainder = image_height % world_size;
+    u32 row_start = world_rank * base + (world_rank < remainder ? world_rank : remainder);
+    u32 local_rows = base + (world_rank < remainder ? 1 : 0); // rows for each rank
+
+	// partitioning cuda j*bs
+	std::vector<vec3> local_image((size_t)local_rows * image_width);
+
+	// RUN CUDA
+    run_parallel_kernel(&cpu_bvh,
+                        local_image.data(),
+                        local_rows,
+                        row_start,       // FIX: was row_offset undefined; use row_start
+                        image_width,
+                        image_height,
+                        bounce_limit);
+
+
+	// gathering back processed partial images
+	int total_sent = static_cast<u32>(local_rows * image_width);
+	std::vector<i32> recv_count(world_size, 0); // how many elements each rank sends
+	std::vector<i32> displacement(world_size, 0); // offset of each ranks data
+
+	MPI_Gather(
+		&total_sent,
+		1,
+		MPI_INT,
+		recv_count.data(),
+		1,
+		MPI_INT
+		0, 
+		MPI_COMM_WORLD
+	);
+
+	std::vector<vec3> full_image;
+	if (world_rank == 0) {
+		displacement[0] = 0;
+		for (u32 i = 1; i < world_size; ++i) {
+			displacement[i] = displacement[i-1] + recv_count[i-1];
+		}
+		// only rank0 needs to allocate full image as its the only one that prints
+		full_image.resize((size_t)image_height * image_width);
+	}
+
+	// to shared vec3 with mpi, convert to 3 packed doubles
+	MPI_Datatype mpi_vec3;
+	MPI_Type_contiguous(3, MPI_DOUBLE, &mpi_vec3);
+	MPI_Type_commit(&mpi_vec3);
+
+	MPI_Gatherv(
+		local_image.data(), total_sent, mpi_vec3,
+		full_image.data(), recv_count.data(),
+		displacement.data(), mpi_vec3,
+		0, MPI_COMM_WORLD
+	);
 	
+	MPI_Type_free(&mpi_vec3);
+
+	// write image
+	if (world_rank == 0) {
+		write_scene_file(full_image, image_width, image_height);
+	}
+
+	MPI_Finalize();
 
 	return 0;
 }
