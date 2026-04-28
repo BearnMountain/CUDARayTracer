@@ -136,9 +136,9 @@ int main(int argc, char** argv) {
     std::vector<Light> lights;
     {
         std::ifstream istr(argv[1]);
-        char code = ' ';
-        while (istr >> code) {
-            if (code == 'L') {
+        std::string buf;
+        while (istr >> buf) {
+            if (buf == "LIGHT") {
                 float x, y, z;
                 float r, g, b;
                 istr >> x >> y >> z >> r >> g >> b;
@@ -146,7 +146,7 @@ int main(int argc, char** argv) {
                 vec3 pos = { x, y, z };
                 Color col = { r, g, b };
                 lights.emplace_back(pos, col);
-            } else if (code == 'S') {
+            } else if (buf == "SPHERE") {
                 float x, y, z;
                 float radius;
                 float r, g, b;
