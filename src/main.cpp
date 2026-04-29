@@ -18,6 +18,10 @@ static __inline__ ticks getticks(void) {
     return (((unsigned long long)tbu0) << 32) | tbl;
 }
 
+// possible cool rendering ideas
+// - proper procedural sky background
+// - shadows
+
 void cpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height, Scene* scene, int bounce_limit);
 
 int main(int argc, char** argv) {
@@ -151,7 +155,7 @@ void cpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height
 			}
 			
 			// Direct light contribution at this bounce
-			double diff = std::max(0.0, hit.normal.dot(scene->get_sun_dir()));
+			double diff = MAX(0.0, hit.normal.dot(scene->get_sun_dir()));
 			vec3 emitted = hit.color * (0.15 + 0.85 * diff);
 			pixel = pixel + ray_intensity * emitted;  // accumulate
 
@@ -163,7 +167,7 @@ void cpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height
 			bounce_ray = Ray(hit.point, reflected);
 
 			// intensity cutoff to stop at a point
-			if (std::max({ray_intensity.x, ray_intensity.y, ray_intensity.z}) < 0.01) break;
+			if (ray_intensity.length() < 0.02) break;
 		}
 
 		// creates image based off ray direction

@@ -40,12 +40,6 @@ struct Hit {
     double t; // ray parameter
 };
 
-struct Sphere {
-    vec3   pos;
-    double radius;
-    vec3   color;
-};
-
 struct Ray {
     vec3 origin, dir; 
     vec3 inverse_dir; // precompute for AABB (b-o) * inverse_dir
@@ -59,6 +53,12 @@ struct Ray {
     {}
 
     vec3 at(double t) const { return origin + dir * t; }
+};
+
+struct Sphere {
+    vec3   pos;
+    double radius;
+    vec3   color;
 };
 
 #endif
