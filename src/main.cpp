@@ -46,6 +46,11 @@ int main(int argc, char** argv) {
 	MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
+	// define custom vec3 type
+	MPI_Datatype MPI_VEC3;
+	MPI_Type_contiguous(3, MPI_DOUBLE, &MPI_VEC3);
+	MPI_Type_commit(&MPI_VEC3);
+
 	/* logically partition pixels */
 
 	int total_pixels = width * height;
@@ -56,7 +61,6 @@ int main(int argc, char** argv) {
 	int pixel_offset = pixels * rank;
 
 	printf("Rank %d doing pixels [%d to %d]\n", rank, pixel_offset, pixel_offset + pixels - 1);
-	
 
 	/* start timing */
 
@@ -69,21 +73,16 @@ int main(int argc, char** argv) {
 	std::vector<vec3> lights;
 	read_scene_file(file_path, scene, lights);
 
-	// partition rows across ranks(easier than partitioning collumns)
-	// todo(jqj): verify makes sense, also prob don't need the remainder stuff, just use nice image sizes
-    u32 base = height / num_ranks;
-    u32 remainder = height % num_ranks;
-    u32 row_start = rank * base + (rank < remainder ? rank : remainder);
-    u32 local_rows = base + (rank < remainder ? 1 : 0); // rows for each rank
-
 	/* render my portion */
+	// todo(jqj): parallelize on cuda
 
 	std::vector<vec3> image(rank == 0 ? total_pixels : pixels);
 	BVH bvh(scene);
 	vec3 camera{0,0,5};
 
-	int x = pixels % width;
-	int y = pixels / width;
+	// iterate over all pixels in my portion
+	int x = pixel_offset % width;
+	int y = pixel_offset / width;
 	for (int i = 0; i < pixels; ++i) {
 
 		assert(x < width && y < height);
@@ -137,12 +136,19 @@ int main(int argc, char** argv) {
 		}
 	}
 
+	/* gather and write image */
+	if (rank == 0) {
+		MPI_Gather(MPI_IN_PLACE, pixels, MPI_VEC3, 
+				   image.data(), pixels, MPI_VEC3, 
+				   0, MPI_COMM_WORLD);
+	} else {
+		MPI_Gather(image.data(), pixels, MPI_VEC3, 
+				   NULL, pixels, MPI_VEC3, 
+				   0, MPI_COMM_WORLD);
+	}
+
 	// todo(jqj): maybe don't use vec for color
 	if (rank == 0) write_image(image, width, height);
-
-	// todo(jqj): run raytracing for my portion
-
-	// todo(jqj): gather and write image
 
 	/* end */
 
