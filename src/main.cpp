@@ -1,7 +1,7 @@
 #include "resource_manager.h"
 #include "obj.h"
 #include "bvh.h"
-#include "parallel_ray.cu"	
+#include <random>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <vector>
 #include <mpi.h>
+
+#if 0
 
 using ticks = unsigned long;
 static __inline__ ticks getticks(void) {
@@ -131,24 +133,79 @@ int main(int argc, char** argv) {
 	return 0;
 }
 
-#if 0
+#endif
 
-int BOUNCE_LIMIT;
-int WIDTH = 1000;
-int HEIGHT = 1000;
+
+int BOUNCE_LIMIT = 8;
+int WIDTH = 2000;
+int HEIGHT = 1400;
 float ASPECT_RATIO;
 
 int main(int argc, char** argv) {
-	WIDTH = atoi(argv[1]);
-	HEIGHT = atoi(argv[2]);
-	BOUNCE_LIMIT = atoi(argv[3]);
+	// WIDTH = atoi(argv[1]);
+	// HEIGHT = atoi(argv[2]);
+	// BOUNCE_LIMIT = atoi(argv[3]);
 	ASPECT_RATIO = double(WIDTH)/HEIGHT;
 
 	std::vector<Sphere> scene;
 	std::vector<vec3> lights;
-	read_scene_file(argv[4], scene, lights);
 
-	bvh = new BVH(scene);
+	std::random_device rd;
+	std::mt19937 gen(rd());
+	std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+	std::uniform_real_distribution<float> distxy(-5.0f, 5.0f);
+	std::uniform_real_distribution<float> distr(0.0f, 1.0f);
+
+	// helpers
+	auto randf = [&]() { return dist01(gen); };
+	auto randxy = [&]() { return distxy(gen); };
+	auto randr  = [&]() { return distr(gen); };
+
+	// ground
+	scene.push_back({
+		{0.0f, -1001.0f, -5.0f},
+		1000.0f,
+		{0.8f, 0.8f, 0.8f}
+	});
+
+	// spheres
+	int s = 100;
+	while (s--) {
+		Sphere sphere;
+		sphere.pos = {
+			randxy(),
+			randxy(),
+			-5.0f
+		};
+
+		sphere.radius = randr();
+
+		sphere.color = {
+			randf(),
+			randf(),
+			randf()
+		};
+
+		scene.push_back(sphere);
+	}
+
+	// lights
+	int l = 3;
+	while (l--) {
+		vec3 dir = {
+			randxy(),
+			randxy(),
+			randxy()
+		};
+
+		lights.push_back(dir.norm());
+	}
+
+
+
+	// read_scene_file(argv[4], scene, lights);
+
+	BVH bvh(scene);
 
 	vec3 camera{0,0,0}; // can move this for different images
 
@@ -167,7 +224,7 @@ int main(int argc, char** argv) {
 			Ray bounce_ray = ray;
 
 			for (int b = 0; b < BOUNCE_LIMIT; ++b) {
-				auto hit = bvh->intersect(bounce_ray);
+				auto hit = bvh.intersect(bounce_ray);
 
 				if (!hit) {
 					// misses sphere, sets default color
@@ -176,7 +233,6 @@ int main(int argc, char** argv) {
 					break;
 				}
 
-				// Direct light contribution at this bounce
 				double diff = std::max(0.0, hit->normal.dot(lights.front()));
 				vec3 emitted = hit->color * (0.15 + 0.85 * diff);
 				pixel = pixel + ray_intensity * emitted;  // accumulate
@@ -201,4 +257,3 @@ int main(int argc, char** argv) {
 
     return 0;
 }
-#endif

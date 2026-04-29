@@ -64,7 +64,7 @@ std::optional<Hit> BVH::intersect(const Ray& ray, double t_min, double t_max) co
 		} else {
 			// Push farther child first so nearer child is processed first
 			int32_t left  = node.left;
-			int32_t right = node.left + 1;
+			int32_t right = node.right;
 
 			double tl = t_max, tr = t_max;
 			bool hl = nodes_[left ].aabb.intersect(ray, t_min, tl);
@@ -74,8 +74,8 @@ std::optional<Hit> BVH::intersect(const Ray& ray, double t_min, double t_max) co
 				// Push farther first
 				if (tl < tr) { stack[stack_top++] = right; stack[stack_top++] = left; }
 				else         { stack[stack_top++] = left;  stack[stack_top++] = right; }
-			} else if (hl) { stack[stack_top++] = left; }
-			  else if (hr) { stack[stack_top++] = right; }
+			} else if (hl) { stack[stack_top++] = left; 
+			} else if (hr) { stack[stack_top++] = right; }
 		}
 	}
 	return best;
@@ -184,6 +184,7 @@ i32 BVH::build(u32 first, u32 count) {
 	int32_t right_child = build(mid, first + count - mid);
 
 	nodes_[node_idx].left  = left_child;
+	nodes_[node_idx].right  = right_child;
 	nodes_[node_idx].count = 0; // marks as inner
 
 	return node_idx;

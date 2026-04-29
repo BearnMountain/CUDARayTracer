@@ -1,137 +1,119 @@
-#pragma once
 #include <cuda_runtime.h>
-#include "vec3.h"   // your vec3 type
-#include "bvh.h"    // your BVH / HitRecord types
-#include "ray.h"    // your Ray type
+#include "vec3.h"
+#include "bvh.h"
+#include "ray.h"
 
-// ─── device-side BVH pointer (set once via cudaMemcpyToSymbol) ───────────────
-__device__ BVH* d_bvh;
+__device__ BVH* shared_bvh;
 
-// ─── Sky colour for rays that escape the scene ───────────────────────────────
-__device__ __forceinline__ vec3 sky_colour() {
-    return vec3{0.05, 0.05, 0.12};
-}
+extern __device__ u32 bounce_limit;
+extern __device__ u32 image_width;
+extern __device__ u32 image_height;
 
-// ─── Per-pixel ray-tracing kernel ────────────────────────────────────────────
-// grid  : (ceil(local_height/TILE), ceil(width/TILE))
-// block : (TILE, TILE)
-//
-// Parameters
-//   pixels       – output buffer, row-major [local_height × width]
-//   width        – full image width
-//   local_height – number of rows this MPI rank owns
-//   row_offset   – first absolute row index for this rank
-//   aspect_ratio – width / full_image_height
-//   bounce_limit – maximum diffuse bounces
-// ─────────────────────────────────────────────────────────────────────────────
-__global__ void ray_kernel(
-    vec3*  pixels,
-    u32    width,
-    u32    local_height,
-    u32    row_offset,
-    double aspect_ratio,
-    u32    bounce_limit,
-    u32    full_height)
+// ─── Device: trace one path from a pixel ─────────────────────────────────────
+__device__ vec3 trace_pixel(int px, int py, BVH* bvh,
+                             u32 width, u32 height, u32 bounces)
 {
-    const u32 col = blockIdx.x * blockDim.x + threadIdx.x;
-    const u32 local_row = blockIdx.y * blockDim.y + threadIdx.y;
+    double aspect = (double)width / height;
 
-    if (col >= width || local_row >= local_height) return;
+    // Normalised pixel centre in [-1,1]
+    double u =  ((px + 0.5) / width)  * 2.0 - 1.0;
+    double v = -((py + 0.5) / height) * 2.0 - 1.0;
 
-    const u32 abs_row = row_offset + local_row;   // row in the full image
-
-    // Normalised pixel centre [-1, 1]
-    double u =  (col       + 0.5) / width       * 2.0 - 1.0;
-    double v = -((abs_row  + 0.5) / full_height * 2.0 - 1.0); // flip Y
-
-    vec3 camera{0.0, 0.0, 0.0};
+    vec3 camera{0, 0, 0};
     vec3 light = vec3{0.6, 1.0, 0.4}.norm();
 
-    Ray   bounce_ray(camera, vec3{u * aspect_ratio, v, -1.0});
-    vec3  pixel{0.0, 0.0, 0.0};
-    vec3  ray_intensity{1.0, 1.0, 1.0};
+    Ray ray(camera, vec3{u * aspect, v, -1.0}.norm());
 
-    for (u32 b = 0; b < bounce_limit; ++b) {
-        auto hit = d_bvh->intersect(bounce_ray);
+    vec3 pixel{0, 0, 0};
+    vec3 throughput{1, 1, 1};
 
+    for (u32 b = 0; b < bounces; ++b) {
+        auto hit = bvh->intersect(ray);
         if (!hit) {
-            pixel = pixel + ray_intensity * sky_colour();
+            vec3 sky{0.05, 0.05, 0.12};
+            pixel = pixel + throughput * sky;
             break;
         }
 
-        // Diffuse shading
-        double diff   = fmax(0.0, hit->normal.dot(light));
-        vec3   emitted = hit->color * (0.15 + 0.85 * diff);
-        pixel          = pixel + ray_intensity * emitted;
+        double diff = fmax(0.0, hit->normal.dot(light));
+        vec3 emitted = hit->color * (0.15 + 0.85 * diff);
+        pixel = pixel + throughput * emitted;
 
-        // Attenuate by surface albedo
-        ray_intensity  = ray_intensity * hit->color;
+        throughput = throughput * hit->color;
 
-        // Mirror reflection
-        double ndotd  = bounce_ray.dir.dot(hit->normal);
-        vec3 reflected = bounce_ray.dir - hit->normal * 2.0 * ndotd;
-        bounce_ray     = Ray(hit->point, reflected);
+        // Early exit if contribution is negligible
+        if (fmax(fmax(throughput.x, throughput.y), throughput.z) < 0.01)
+            break;
 
-        // Russian-roulette early exit
-        double max_i = fmax(ray_intensity.x, fmax(ray_intensity.y, ray_intensity.z));
-        if (max_i < 0.01) break;
+        // Reflect
+        vec3 refl = ray.dir - hit->normal * 2.0 * ray.dir.dot(hit->normal);
+        ray = Ray(hit->point, refl.norm());
     }
 
-    pixels[local_row * width + col] = pixel;
+    return pixel;
 }
 
-// ─── Host-callable wrapper ────────────────────────────────────────────────────
-// Allocates device memory, launches the kernel, copies results back.
+// ─── Kernel: one thread per pixel, covers local_rows rows ────────────────────
 //
-// host_bvh     – pointer to a BVH already constructed in CPU memory;
-//                we copy it to the device symbol d_bvh.
-// out_pixels   – pre-allocated host buffer [local_height × width]
-// ─────────────────────────────────────────────────────────────────────────────
-void launch_parallel_ray(
-    BVH*   host_bvh,
-    vec3*  out_pixels,
-    u32    width,
-    u32    full_height,
-    u32    local_height,
-    u32    row_offset,
-    u32    bounce_limit)
+//  row_offset  – first absolute row this rank owns
+//  local_rows  – how many rows this rank owns
+//  out_pixels  – device buffer sized  local_rows * image_width
+__global__ void ray_kernel(BVH*  bvh,
+                            vec3* out_pixels,
+                            u32   row_offset,
+                            u32   local_rows,
+                            u32   width,
+                            u32   height,
+                            u32   bounces)
 {
-    // ── 1. Copy BVH pointer into device symbol ────────────────────────────
-    BVH* d_bvh_ptr;
-    cudaMalloc(&d_bvh_ptr, sizeof(BVH));
-    cudaMemcpy(d_bvh_ptr, host_bvh, sizeof(BVH), cudaMemcpyHostToDevice);
-    cudaMemcpyToSymbol(d_bvh, &d_bvh_ptr, sizeof(BVH*));
+    // 2-D thread index → pixel coordinate
+    u32 px = blockIdx.x * blockDim.x + threadIdx.x;   // column
+    u32 ly = blockIdx.y * blockDim.y + threadIdx.y;   // local row index
 
-    // ── 2. Allocate pixel buffer on device ───────────────────────────────
-    vec3* d_pixels;
-    const size_t buf_bytes = (size_t)local_height * width * sizeof(vec3);
-    cudaMalloc(&d_pixels, buf_bytes);
-    cudaMemset(d_pixels, 0, buf_bytes);
+    if (px >= width || ly >= local_rows) return;
 
-    // ── 3. Launch kernel ──────────────────────────────────────────────────
-    constexpr u32 TILE = 16;
-    dim3 block(TILE, TILE);
-    dim3 grid(
-        (width        + TILE - 1) / TILE,
-        (local_height + TILE - 1) / TILE);
+    u32 py = row_offset + ly;   // absolute row in the full image
 
-    double aspect_ratio = double(width) / double(full_height);
+    out_pixels[ly * width + px] = trace_pixel(px, py, bvh, width, height, bounces);
+}
 
-    ray_kernel<<<grid, block>>>(
-        d_pixels,
-        width,
-        local_height,
-        row_offset,
-        aspect_ratio,
-        bounce_limit,
-        full_height);
+// ─── Host launch function ─────────────────────────────────────────────────────
+void run_parallel_kernel(BVH*  cpu_bvh,
+                         vec3* out_pixels,   // host output buffer
+                         u32   local_rows,
+                         u32   row_offset,
+                         u32   width,
+                         u32   height,
+                         u32   bounces)
+{
+    // ── 1. Upload BVH to device ───────────────────────────────────────────────
+    BVH* d_bvh;
+    cudaMalloc(&d_bvh, sizeof(BVH));
+    cudaMemcpy(d_bvh, cpu_bvh, sizeof(BVH), cudaMemcpyHostToDevice);
 
+    // Store in the global device pointer (optional – kernel receives it directly)
+    cudaMemcpyToSymbol(shared_bvh, &d_bvh, sizeof(BVH*));
+
+    // ── 2. Allocate device pixel buffer ──────────────────────────────────────
+    size_t n_pixels = (size_t)local_rows * width;
+    vec3*  d_pixels;
+    cudaMalloc(&d_pixels, n_pixels * sizeof(vec3));
+
+    // ── 3. Launch ─────────────────────────────────────────────────────────────
+    // 16×16 thread blocks is a common sweet-spot for pixel workloads
+    dim3 block(16, 16);
+    dim3 grid((width      + block.x - 1) / block.x,
+              (local_rows + block.y - 1) / block.y);
+
+    ray_kernel<<<grid, block>>>(d_bvh, d_pixels,
+                                row_offset, local_rows,
+                                width, height, bounces);
     cudaDeviceSynchronize();
 
-    // ── 4. Copy results back to host ──────────────────────────────────────
-    cudaMemcpy(out_pixels, d_pixels, buf_bytes, cudaMemcpyDeviceToHost);
+    // ── 4. Copy result back to host ───────────────────────────────────────────
+    cudaMemcpy(out_pixels, d_pixels, n_pixels * sizeof(vec3), cudaMemcpyDeviceToHost);
 
-    // ── 5. Clean up ───────────────────────────────────────────────────────
+    // ── 5. Cleanup ────────────────────────────────────────────────────────────
     cudaFree(d_pixels);
-    cudaFree(d_bvh_ptr);
+    cudaFree(d_bvh);
 }

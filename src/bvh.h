@@ -14,6 +14,7 @@ public:
 	struct Node {
 		AABB aabb;
 		i32 left; // start hear
+		i32 right;
 		i32 count; // left + count for all leafs
 		bool is_leaf() const { return count > 0; }
 	};
@@ -25,7 +26,7 @@ public:
 
 private:
 	std::vector<Sphere> spheres_;
-	std::vector<uint32_t> sphere_indices_; // all spheres stored in static array for easier access
+	std::vector<uint32_t> sphere_indices_; // all spheres stored in flat array for easier access
 	std::vector<AABB> sphere_aabbs_;
 	std::vector<vec3> centroids_;
 	std::vector<Node> nodes_;
