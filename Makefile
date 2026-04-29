@@ -15,13 +15,13 @@ TARGET = build/out
 $(TARGET): $(OBJS) | build
 	mpic++ $(OBJS) -o $@ -L/usr/local/cuda-11.2/lib64/ -lcudadevrt -lcudart -lstdc++ -lm
 
-# compile mpi c++
+# compile c++ with mpi
 build/%.o: src/%.cpp | build
 	g++ -O3 $(mpiargs) -c $< -o $@
 
-# compile cuda
+# compile cuda with mpi
 build/%.o: src/%.cu | build
-	nvcc -O3 -arch=sm_70 -c $< -o $@
+	nvcc -O3 -arch=sm_70 $(mpiargs) -c $< -o $@
 
 # create build dir
 build:

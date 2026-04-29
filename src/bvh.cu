@@ -19,6 +19,15 @@ BVH::BVH(std::vector<Sphere> spheres) {
 
 	nodes_.reserve(2 * spheres_.size());
 	build(0, static_cast<u32>(spheres_.size()));
+
+	// this type is immutable, cuda needs these pointer free of c++ stl
+	// nonsense, so we smuggle them out
+	this->spheres = spheres_.data();
+	this->spheres_len = spheres_.size();
+	this->sphere_indices = sphere_indices_.data();
+	this->sphere_indices_len = sphere_indices_.size();
+	this->nodes = nodes_.data();
+	this->nodes_len = nodes_.size();
 }
 
 bool BVH::intersect(const Ray& ray, Hit* out) const {
@@ -26,27 +35,27 @@ bool BVH::intersect(const Ray& ray, Hit* out) const {
 	double t_min = T_MIN;
 	double t_max = T_MAX;
 
-	if (nodes_.empty()) return false;
+	if (nodes_len == 0) return false;
 
 	Hit best;
 	bool found = false;
 
 	// Iterative traversal with an explicit stack
-	std::array<int32_t, 64> stack;
+	int32_t stack[64];
 	int stack_top = 0;
 	stack[stack_top++] = 0; // root
 
 	while (stack_top > 0) {
-		const Node& node = nodes_[stack[--stack_top]];
+		const Node& node = nodes[stack[--stack_top]];
 		if (!node.aabb.intersect(ray, t_min, t_max)) continue;
 
 		if (node.is_leaf()) {
 			for (int i = 0; i < node.count; ++i) {
-				uint32_t si = sphere_indices_[node.left + i];
+				uint32_t si = sphere_indices[node.left + i];
 
 				// check if it intersects sphere
 
-				const Sphere& s = spheres_[si];
+				const Sphere& s = spheres[si];
 				vec3   oc = ray.origin - s.pos;
 				double a  = ray.dir.dot(ray.dir);
 				double hb = oc.dot(ray.dir);         // half-b
@@ -79,8 +88,8 @@ bool BVH::intersect(const Ray& ray, Hit* out) const {
 			int32_t right = node.right;
 
 			double tl = t_max, tr = t_max;
-			bool hl = nodes_[left ].aabb.intersect(ray, t_min, tl);
-			bool hr = nodes_[right].aabb.intersect(ray, t_min, tr);
+			bool hl = nodes[left ].aabb.intersect(ray, t_min, tl);
+			bool hr = nodes[right].aabb.intersect(ray, t_min, tr);
 
 			if (hl && hr) {
 				// Push farther first
@@ -145,9 +154,8 @@ i32 BVH::build(u32 first, u32 count) {
 		}
 
 		// Sweep left-to-right and right-to-left to compute SAH for each split
+		// note(jqj): I removed some unused variables here
 		std::array<double, NUM_BINS - 1> cost{};
-		AABB left_aabb;  int left_count  = 0;
-		AABB right_aabb; int right_count = 0;
 		std::array<AABB, NUM_BINS> prefix({}), suffix({});
 		std::array<int,  NUM_BINS> pcnt{}, scnt{};
 

@@ -3,6 +3,7 @@
 #include <vector>
 #include <mpi.h>
 #include <assert.h>
+#include <cuda_runtime.h>
 
 #include "scene.h"
 #include "stb_image_write.h"
@@ -22,7 +23,13 @@ static __inline__ ticks getticks(void) {
 // - proper procedural sky background
 // - shadows
 
+// performance improvements
+// - put BVH in gpu memory
+// - 2d kernel execution (requires the mpi partitioning logic to change)
+// - don't use vec3 of doubles for color
+
 void cpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height, Scene* scene, int bounce_limit);
+__global__ void gpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height, Scene* scene, int bounce_limit);
 
 int main(int argc, char** argv) {
 
@@ -45,10 +52,9 @@ int main(int argc, char** argv) {
 	MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
 	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-	// define custom vec3 type
-	MPI_Datatype MPI_VEC3;
-	MPI_Type_contiguous(3, MPI_DOUBLE, &MPI_VEC3);
-	MPI_Type_commit(&MPI_VEC3);
+	/* warm up cuda driver */
+
+	cudaFree(0);
 
 	/* logically partition pixels */
 
@@ -63,26 +69,43 @@ int main(int argc, char** argv) {
 
 	/* start timing */
 
-	ticks start, end;
+	ticks start, render, end;
 	if (rank == 0) start = getticks();
 
 	/* load scene */
 
 	Scene scene(file_path);
 
+	/* allocate image memory */
+
+	// allocate memory for image portion (or full image on rank 0)
+	vec3* image = NULL;
+	cudaError_t err = cudaMallocManaged(&image, (rank == 0 ? total_pixels : pixels) * sizeof(vec3));
+	if (err != cudaSuccess) {
+		fprintf(stderr, "Failed to allocate managed memory: %s\n", cudaGetErrorString(err));
+		abort();
+	}
+
 	/* render my portion */
 
-	// todo(jqj): parallelize on cuda
-	std::vector<vec3> image(rank == 0 ? total_pixels : pixels);
-	cpu_render(image.data(), pixel_offset, pixels, width, height, &scene, bounce_limit);
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	if (rank == 0) {
+		render = getticks();
+	}
+
+	cpu_render(image, pixel_offset, pixels, width, height, &scene, bounce_limit);
+
+	// todo(jqj): set gpu
+	// gpu_render<<<1, 1>>>(image, pixel_offset, pixels, width, height, &scene, bounce_limit);
 
 	/* gather and write image */
 
 	if (rank == 0) {
 
 		// grab data
-		MPI_Gather(MPI_IN_PLACE, pixels, MPI_VEC3, 
-				   image.data(), pixels, MPI_VEC3, 
+		MPI_Gather(MPI_IN_PLACE, pixels * 3, MPI_DOUBLE, 
+				   image, pixels * 3, MPI_DOUBLE, 
 				   0, MPI_COMM_WORLD);
 
 		// write data to file
@@ -90,9 +113,9 @@ int main(int argc, char** argv) {
 		std::vector<uint8_t> rgb(width * height * 3);
 
 		for (int i = 0; i < width * height; i++) {
-			rgb[i * 3 + 0] = (uint8_t)(CLAMP(image[i].x, 0.0f, 1.0f) * 255.0f);
-			rgb[i * 3 + 1] = (uint8_t)(CLAMP(image[i].y, 0.0f, 1.0f) * 255.0f);
-			rgb[i * 3 + 2] = (uint8_t)(CLAMP(image[i].z, 0.0f, 1.0f) * 255.0f);
+			rgb[i * 3 + 0] = (uint8_t)(CLAMP(image[i].x, 0.0, 1.0) * 255.0f);
+			rgb[i * 3 + 1] = (uint8_t)(CLAMP(image[i].y, 0.0, 1.0) * 255.0f);
+			rgb[i * 3 + 2] = (uint8_t)(CLAMP(image[i].z, 0.0, 1.0) * 255.0f);
 		}
 
 		stbi_write_png(
@@ -105,8 +128,8 @@ int main(int argc, char** argv) {
 		);
 
 	} else {
-		MPI_Gather(image.data(), pixels, MPI_VEC3, 
-				   NULL, pixels, MPI_VEC3, 
+		MPI_Gather(image, pixels * 3, MPI_DOUBLE, 
+				   NULL, pixels * 3, MPI_DOUBLE, 
 				   0, MPI_COMM_WORLD);
 	}
 
@@ -114,10 +137,13 @@ int main(int argc, char** argv) {
 
 	if (rank == 0) {
 		end = getticks();
-		printf("Wrote image in %lf seconds, using %d ranks\n", (double)(end - start) / (double)512000000.0, num_ranks);
+		printf("Started rendering after %lf seconds\n", (double)(render - start) / (double)512000000.0);
+		printf("Rendered and wrote image in %lf seconds\n", (double)(end - render) / (double)512000000.0);
+		printf("Total time %lf seconds, with %d ranks\n", (double)(end - start) / (double)512000000.0, num_ranks);
 	}
 
 	MPI_Finalize();
+	cudaFree(image);
 
 	return 0;
 }
@@ -181,4 +207,8 @@ void cpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height
 			++y;
 		}
 	}
+}
+
+__global__ void gpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height, Scene* scene, int bounce_limit) {
+
 }

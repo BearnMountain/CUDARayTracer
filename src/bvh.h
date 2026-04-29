@@ -41,14 +41,18 @@ struct AABB {
 
     // returns true if ray hits in [t_min, t_max]
 	// SLAB TEST: https://tavianator.com/2022/ray_box_boundary.html
-    bool intersect(const Ray& ray, double t_min, double t_max) const {
+    HD bool intersect(const Ray& ray, double t_min, double t_max) const {
         for (int i = 0; i < 3; ++i) {
             double inv = ray.inverse_dir[i];
             double t0  = (min[i] - ray.origin[i]) * inv;
             double t1  = (max[i] - ray.origin[i]) * inv;
-            if (inv < 0.0) std::swap(t0, t1);
-            t_min = std::max(t_min, t0);
-            t_max = std::min(t_max, t1);
+            if (inv < 0.0) {
+				double temp = t1;
+				t1 = t0;
+				t0 = temp;
+			}
+            t_min = MAX(t_min, t0);
+            t_max = MIN(t_max, t1);
             if (t_max <= t_min) return false;
         }
         return true;
@@ -63,20 +67,29 @@ public:
 		i32 left; // start here
 		i32 right;
 		i32 count; // left + count for all leaves
-		bool is_leaf() const { return count > 0; }
+		HD bool is_leaf() const { return count > 0; }
 	};
 
 	BVH(std::vector<Sphere> spheres);
-	bool intersect(const Ray& ray, Hit* out) const;
-	const std::vector<Sphere>& spheres() const { return spheres_; }
-	const std::vector<Node>& nodes() const { return nodes_; }
+	HD bool intersect(const Ray& ray, Hit* out) const;
 
 private:
+	// there are "c array" variants of the top three vectors so cuda can access them
+
 	std::vector<Sphere> spheres_;
+	Sphere* spheres;
+	int spheres_len;
+
 	std::vector<uint32_t> sphere_indices_; // all spheres stored in static array for easier access
+	uint32_t* sphere_indices;
+	int sphere_indices_len;
+
+	std::vector<Node> nodes_;
+	Node* nodes;
+	int nodes_len;
+
 	std::vector<AABB> sphere_aabbs_;
 	std::vector<vec3> centroids_;
-	std::vector<Node> nodes_;
 
 	i32 build(u32 first, u32 count);
 };

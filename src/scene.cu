@@ -33,7 +33,8 @@ Scene::Scene(const char* file_path) {
     }
 
 	// construct bvh
-	bvh = std::make_unique<BVH>(spheres);
+	bvh_ptr = std::make_unique<BVH>(spheres);
+	bvh = bvh_ptr.get();
 }
 
 bool Scene::intersect(const Ray& ray, Hit* out) const {

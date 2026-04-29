@@ -13,16 +13,18 @@ struct Scene {
 public:
 	Scene(const char* file_path);
 
-	bool intersect(const Ray& ray, Hit* out) const;
-	inline vec3 get_cam_pos() const { return cam_pos; };
-	inline vec3 get_sun_dir() const { return sun_dir; };
+	HD bool intersect(const Ray& ray, Hit* out) const;
+	HD inline vec3 get_cam_pos() const { return cam_pos; };
+	HD inline vec3 get_sun_dir() const { return sun_dir; };
 
 private:
 	vec3 cam_pos;
 	vec3 sun_dir;
-	
-	std::unique_ptr<BVH> bvh;
+
 	std::vector<Sphere> spheres;
+	
+	std::unique_ptr<BVH> bvh_ptr;
+	BVH* bvh;
 };
 
 #endif
