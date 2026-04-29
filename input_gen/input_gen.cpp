@@ -4,7 +4,10 @@
 #include <string>
 
 double randf() {
-    return (double)rand() / (double)RAND_MAX;
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    static std::uniform_real_distribution<double> dis(0.0, 1.0);
+    return dis(gen);
 }
 
 // arg 1: output file
@@ -13,7 +16,6 @@ double randf() {
 // arg 4: double r such that x, y, z of spheres are in the range [-r, r]
 // arg 5: max radius for spheres
 int main(int argc, char** argv) {
-    srand(0);
     int s = std::stoi(argv[2]);
     int l = std::stoi(argv[3]);
     const double max_range = std::stod(argv[4]);
