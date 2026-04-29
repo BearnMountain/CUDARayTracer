@@ -13,8 +13,9 @@ public:
 	static constexpr u32 MAX_LEAF = 4; // max spheres per each leaf
 	struct Node {
 		AABB aabb;
-		i32 left; // start hear
-		i32 count; // left + count for all leafs
+		i32 left; // start here
+		i32 right;
+		i32 count; // left + count for all leaves
 		bool is_leaf() const { return count > 0; }
 	};
 

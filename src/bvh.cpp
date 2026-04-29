@@ -76,7 +76,7 @@ bool BVH::intersect(const Ray& ray, Hit* out) const {
 
 			// Push farther child first so nearer child is processed first
 			int32_t left  = node.left;
-			int32_t right = node.left + 1;
+			int32_t right = node.right;
 
 			double tl = t_max, tr = t_max;
 			bool hl = nodes_[left ].aabb.intersect(ray, t_min, tl);
@@ -198,6 +198,7 @@ i32 BVH::build(u32 first, u32 count) {
 	int32_t right_child = build(mid, first + count - mid);
 
 	nodes_[node_idx].left  = left_child;
+	nodes_[node_idx].right = right_child;
 	nodes_[node_idx].count = 0; // marks as inner
 
 	return node_idx;
