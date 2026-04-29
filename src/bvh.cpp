@@ -1,5 +1,8 @@
 #include "bvh.h"
 
+const double T_MIN = 1e-4;
+const double T_MAX = std::numeric_limits<double>::max();
+
 BVH::BVH(std::vector<Sphere> spheres) {
 	if (spheres.empty()) return;
 	spheres_ = std::move(spheres);
@@ -18,10 +21,16 @@ BVH::BVH(std::vector<Sphere> spheres) {
 	build(0, static_cast<u32>(spheres_.size()));
 }
 
-std::optional<Hit> BVH::intersect(const Ray& ray, double t_min, double t_max) const {
-	if (nodes_.empty()) return std::nullopt;
+bool BVH::intersect(const Ray& ray, Hit* out) const {
 
-	std::optional<Hit> best;
+	double t_min = T_MIN;
+	double t_max = T_MAX;
+
+	if (nodes_.empty()) return false;
+
+	Hit best;
+	bool found = false;
+
 	// Iterative traversal with an explicit stack
 	std::array<int32_t, 64> stack;
 	int stack_top = 0;
@@ -35,8 +44,7 @@ std::optional<Hit> BVH::intersect(const Ray& ray, double t_min, double t_max) co
 			for (int i = 0; i < node.count; ++i) {
 				uint32_t si = sphere_indices_[node.left + i];
 
-				// checks if it intersects sphere
-				std::optional<Hit> hit;
+				// check if it intersects sphere
 
 				const Sphere& s = spheres_[si];
 				vec3   oc = ray.origin - s.pos;
@@ -53,15 +61,19 @@ std::optional<Hit> BVH::intersect(const Ray& ray, double t_min, double t_max) co
 					if (t < t_min || t > t_max) continue;
 				}
 
+				// construct hit
+				
 				vec3 point  = ray.at(t);
 				vec3 normal = (point - s.pos) / s.radius; // unit outward normal
-				hit = {t, point, normal, s.color, si};
-				if (hit != std::nullopt) {
-					t_max = hit->t; // shrink window — keeps only closest
-					best  = hit;
-				}
+				best = {t, point, normal, s.color, si};
+				found = true;
+
+				// shrink window — keeps only closest
+
+				t_max = t;
 			}
 		} else {
+
 			// Push farther child first so nearer child is processed first
 			int32_t left  = node.left;
 			int32_t right = node.left + 1;
@@ -78,7 +90,9 @@ std::optional<Hit> BVH::intersect(const Ray& ray, double t_min, double t_max) co
 			  else if (hr) { stack[stack_top++] = right; }
 		}
 	}
-	return best;
+
+	*out = best;
+	return found;
 }
 
 i32 BVH::build(u32 first, u32 count) {
@@ -89,7 +103,7 @@ i32 BVH::build(u32 first, u32 count) {
 	}
 
 	i32 node_idx = static_cast<i32>(nodes_.size());
-	nodes_.push_back({});          // placeholder — must not use reference after this
+	nodes_.push_back({});
 	nodes_[node_idx].aabb = bounds;
 
 	if (count <= MAX_LEAF) {
@@ -125,7 +139,7 @@ i32 BVH::build(u32 first, u32 count) {
 		for (int i = first; i < first + count; ++i) {
 			uint32_t si = sphere_indices_[i];
 			int b = static_cast<int>((centroids_[si][axis] - lo) * inv_extent);
-			b = std::clamp(b, 0, NUM_BINS - 1);
+			b = CLAMP(b, 0, NUM_BINS - 1);
 			bins[b].aabb.expand(sphere_aabbs_[si]);
 			bins[b].count++;
 		}
@@ -174,7 +188,7 @@ i32 BVH::build(u32 first, u32 count) {
 		sphere_indices_.begin() + first + count,
 		[&](uint32_t si) {
 			int b = static_cast<int>((centroids_[si][best_axis] - lo) * inv_ext);
-			return std::clamp(b, 0, NUM_BINS - 1) <= best_bin;
+			return CLAMP(b, 0, NUM_BINS - 1) <= best_bin;
 	});
 	int mid = static_cast<int>(mid_it - sphere_indices_.begin());
 	if (mid == first || mid == first + count) mid = first + count / 2;

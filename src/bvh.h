@@ -19,7 +19,7 @@ public:
 	};
 
 	BVH(std::vector<Sphere> spheres);
-	std::optional<Hit> intersect(const Ray& ray, double t_min = 1e-4, double t_max = std::numeric_limits<double>::max()) const;
+	bool intersect(const Ray& ray, Hit* out) const;
 	const std::vector<Sphere>& spheres() const { return spheres_; }
 	const std::vector<Node>& nodes() const { return nodes_; }
 

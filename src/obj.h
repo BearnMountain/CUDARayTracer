@@ -5,11 +5,11 @@
 #include <cstdint>
 #include <algorithm>
 
+// todo(jqj): use of these is inconsistent
 typedef uint32_t u32;
 typedef int32_t i32;
 
-// header only objects for ray tracing
-// - just link this, no need for cpp file
+#define CLAMP(x, low, high) (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
 
 struct vec3 {
     double x = 0, y = 0, z = 0;
@@ -37,7 +37,6 @@ struct Sphere {
     double radius;
     vec3   color;
 };
-
 
 typedef struct Ray {
     vec3 origin, dir; 
