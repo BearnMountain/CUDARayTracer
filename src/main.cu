@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
 
 	/* start timing */
 
-	ticks start, render, end;
+	ticks start, before_render, after_render, end;
 	if (rank == 0) start = getticks();
 
 	/* load scene */
@@ -92,7 +92,7 @@ int main(int argc, char** argv) {
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	if (rank == 0) {
-		render = getticks();
+		before_render = getticks();
 	}
 
 	// cpu_render(image, pixel_offset, pixels, width, height, &scene, bounce_limit);
@@ -102,6 +102,12 @@ int main(int argc, char** argv) {
 	gpu_render<<<blocks, threads>>>(image, pixel_offset, pixels, width, height, gpu_scene, bounce_limit);
 	cudaDeviceSynchronize();
 	// todo(jqj): investigate performance scaling. The network send is probably the bottleneck
+
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	if (rank == 0) {
+		after_render = getticks();
+	}
 
 	/* gather and write image */
 
@@ -141,8 +147,9 @@ int main(int argc, char** argv) {
 
 	if (rank == 0) {
 		end = getticks();
-		printf("Started rendering after %lf seconds\n", (double)(render - start) / (double)512000000.0);
-		printf("Rendered and wrote image in %lf seconds\n", (double)(end - render) / (double)512000000.0);
+		printf("Started rendering after %lf seconds\n", (double)(before_render - start) / (double)512000000.0);
+		printf("Rendered image in %lf seconds\n", (double)(after_render - before_render) / (double)512000000.0);
+		printf("Transmit and wrote image in %lf seconds\n", (double)(end - after_render) / (double)512000000.0);
 		printf("Total time %lf seconds, with %d ranks\n", (double)(end - start) / (double)512000000.0, num_ranks);
 	}
 
