@@ -7,6 +7,11 @@ double randf() {
     return (double)rand() / (double)RAND_MAX;
 }
 
+// arg 1: output file
+// arg 2: # of spheres
+// arg 3: # of lights
+// arg 4: double r such that x, y, z of spheres are in the range [-r, r]
+// arg 5: max radius for spheres
 int main(int argc, char** argv) {
     srand(0);
     int s = std::stoi(argv[2]);
