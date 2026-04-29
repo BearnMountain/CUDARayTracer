@@ -71,27 +71,21 @@ public:
 	};
 
 	BVH(std::vector<Sphere> spheres);
-	HD bool intersect(const Ray& ray, Hit* out) const;
-
-private:
-	// there are "c array" variants of the top three vectors so cuda can access them
+	bool intersect(const Ray& ray, Hit* out) const;
 
 	std::vector<Sphere> spheres_;
-	Sphere* spheres;
-	int spheres_len;
-
-	std::vector<uint32_t> sphere_indices_; // all spheres stored in static array for easier access
-	uint32_t* sphere_indices;
-	int sphere_indices_len;
-
+	std::vector<uint32_t> sphere_indices_;
 	std::vector<Node> nodes_;
-	Node* nodes;
-	int nodes_len;
-
 	std::vector<AABB> sphere_aabbs_;
 	std::vector<vec3> centroids_;
 
 	i32 build(u32 first, u32 count);
 };
+
+HD bool intersect_bvh(const Ray& ray, Hit* out,
+					  const Sphere* spheres, int spheres_len,
+					  const uint32_t* sphere_indices, int sphere_indices_len,
+					  const BVH::Node* nodes, int nodes_len);
+
 
 #endif

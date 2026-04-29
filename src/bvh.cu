@@ -19,18 +19,11 @@ BVH::BVH(std::vector<Sphere> spheres) {
 
 	nodes_.reserve(2 * spheres_.size());
 	build(0, static_cast<u32>(spheres_.size()));
-
-	// this type is immutable, cuda needs these pointer free of c++ stl
-	// nonsense, so we smuggle them out
-	this->spheres = spheres_.data();
-	this->spheres_len = spheres_.size();
-	this->sphere_indices = sphere_indices_.data();
-	this->sphere_indices_len = sphere_indices_.size();
-	this->nodes = nodes_.data();
-	this->nodes_len = nodes_.size();
 }
 
-bool BVH::intersect(const Ray& ray, Hit* out) const {
+HD bool intersect_bvh(const Ray& ray, Hit* out, const Sphere* spheres, int spheres_len,
+					  const uint32_t* sphere_indices, int sphere_indices_len,
+					  const BVH::Node* nodes, int nodes_len) {
 
 	double t_min = T_MIN;
 	double t_max = T_MAX;
@@ -46,7 +39,7 @@ bool BVH::intersect(const Ray& ray, Hit* out) const {
 	stack[stack_top++] = 0; // root
 
 	while (stack_top > 0) {
-		const Node& node = nodes[stack[--stack_top]];
+		const BVH::Node& node = nodes[stack[--stack_top]];
 		if (!node.aabb.intersect(ray, t_min, t_max)) continue;
 
 		if (node.is_leaf()) {
@@ -96,12 +89,19 @@ bool BVH::intersect(const Ray& ray, Hit* out) const {
 				if (tl < tr) { stack[stack_top++] = right; stack[stack_top++] = left; }
 				else         { stack[stack_top++] = left;  stack[stack_top++] = right; }
 			} else if (hl) { stack[stack_top++] = left; }
-			  else if (hr) { stack[stack_top++] = right; }
+			else if (hr) { stack[stack_top++] = right; }
 		}
 	}
 
 	*out = best;
 	return found;
+}
+
+bool BVH::intersect(const Ray& ray, Hit* out) const {
+	return intersect_bvh(ray, out,
+						 spheres_.data(), spheres_.size(),
+						 sphere_indices_.data(), sphere_indices_.size(),
+						 nodes_.data(), nodes_.size());
 }
 
 i32 BVH::build(u32 first, u32 count) {

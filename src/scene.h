@@ -8,14 +8,34 @@
 
 // scene holds scene data, and lets you intersect the scene. Uses BVH internally
 
+struct GPUScene {
+
+	HD bool intersect(const Ray& ray, Hit* out) const;
+	void free();
+
+	vec3 cam_pos;
+	vec3 sun_dir;
+
+	Sphere* spheres;
+	int spheres_len;
+	
+	uint32_t* sphere_indices;
+	int sphere_indices_len;
+
+	BVH::Node* nodes;
+	int nodes_len;
+};
+
 struct Scene {
 
 public:
 	Scene(const char* file_path);
 
-	HD bool intersect(const Ray& ray, Hit* out) const;
-	HD inline vec3 get_cam_pos() const { return cam_pos; };
-	HD inline vec3 get_sun_dir() const { return sun_dir; };
+	bool intersect(const Ray& ray, Hit* out) const;
+	inline vec3 get_cam_pos() const { return cam_pos; };
+	inline vec3 get_sun_dir() const { return sun_dir; };
+
+	GPUScene copy_to_gpu();
 
 private:
 	vec3 cam_pos;
