@@ -1,4 +1,5 @@
-mpiargs  = -I/opt/ibm/spectrum_mpi/include -L/opt/ibm/spectrum_mpi/lib -lmpiprofilesupport -lmpi_ibm
+mpiccargs  = -I/opt/ibm/spectrum_mpi/include
+mpildargs  = -L/opt/ibm/spectrum_mpi/lib -lmpiprofilesupport -lmpi_ibm
 
 # sources
 CPP_SRCS = $(wildcard src/*.cpp)
@@ -13,15 +14,15 @@ TARGET = build/out
 
 # link
 $(TARGET): $(OBJS) | build
-	mpic++ $(OBJS) -o $@ -L/usr/local/cuda-11.2/lib64/ -lcudadevrt -lcudart -lstdc++ -lm
+	nvcc -arch=sm_70 -ccbin mpic++ -rdc=true $(OBJS) -o $@ -lstdc++ -lm $(mpildargs)
 
 # compile c++ with mpi
 build/%.o: src/%.cpp | build
-	g++ -O3 $(mpiargs) -c $< -o $@
+	g++ -O3 $(mpiccargs) -c $< -o $@
 
 # compile cuda with mpi
 build/%.o: src/%.cu | build
-	nvcc -O3 -arch=sm_70 $(mpiargs) -c $< -o $@
+	nvcc -O3 -arch=sm_70 -rdc=true $(mpiccargs) -c $< -o $@
 
 # create build dir
 build:

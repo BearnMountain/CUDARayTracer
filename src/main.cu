@@ -24,12 +24,11 @@ static __inline__ ticks getticks(void) {
 // - shadows
 
 // performance improvements
-// - put BVH in gpu memory
 // - 2d kernel execution (requires the mpi partitioning logic to change)
 // - don't use vec3 of doubles for color
 
 void cpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height, Scene* scene, int bounce_limit);
-__global__ void gpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height, Scene* scene, int bounce_limit);
+__global__ void gpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height, GPUScene scene, int bounce_limit);
 
 int main(int argc, char** argv) {
 
@@ -54,6 +53,7 @@ int main(int argc, char** argv) {
 
 	/* warm up cuda driver */
 
+	cudaSetDevice(rank % 4);
 	cudaFree(0);
 
 	/* logically partition pixels */
@@ -75,6 +75,7 @@ int main(int argc, char** argv) {
 	/* load scene */
 
 	Scene scene(file_path);
+	GPUScene gpu_scene = scene.copy_to_gpu();
 
 	/* allocate image memory */
 
@@ -94,10 +95,13 @@ int main(int argc, char** argv) {
 		render = getticks();
 	}
 
-	cpu_render(image, pixel_offset, pixels, width, height, &scene, bounce_limit);
+	// cpu_render(image, pixel_offset, pixels, width, height, &scene, bounce_limit);
 
-	// todo(jqj): set gpu
-	// gpu_render<<<1, 1>>>(image, pixel_offset, pixels, width, height, &scene, bounce_limit);
+	int threads = 256;
+    int blocks = (pixels + threads - 1) / threads;
+	gpu_render<<<blocks, threads>>>(image, pixel_offset, pixels, width, height, gpu_scene, bounce_limit);
+	cudaDeviceSynchronize();
+	// todo(jqj): investigate performance scaling. The network send is probably the bottleneck
 
 	/* gather and write image */
 
@@ -143,6 +147,7 @@ int main(int argc, char** argv) {
 	}
 
 	MPI_Finalize();
+	gpu_scene.free();
 	cudaFree(image);
 
 	return 0;
@@ -209,6 +214,55 @@ void cpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height
 	}
 }
 
-__global__ void gpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height, Scene* scene, int bounce_limit) {
+__global__ void gpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height, GPUScene scene, int bounce_limit) {
 
+	// find index in pixels
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= pixels) return;
+
+	// find x y coordinate
+	int global_pixel = starting_pixel + i;
+	int x = global_pixel % width;
+	int y = global_pixel / width;
+
+	// normalized center of pixel 
+	double aspect_ratio = (double)width / (double)height;
+	double u = (x + 0.5) / width * 2.0 - 1.0;
+	double v = -((y + 0.5) / height * 2.0 - 1.0); // flip image rightside up
+
+	Ray ray(scene.cam_pos, vec3{u * aspect_ratio, v, -1.0});
+	vec3 pixel{0,0,0};
+	vec3 ray_intensity{1,1,1};
+	Ray bounce_ray = ray;
+
+	for (int b = 0; b < bounce_limit; ++b) {
+
+		Hit hit;
+		bool did_hit = scene.intersect(bounce_ray, &hit);
+
+		if (!did_hit) {
+			// misses objects, sky color
+			vec3 sky{0.2, 0.4, 0.6};
+			pixel = pixel + ray_intensity * sky;
+			break;
+		}
+			
+		// Direct light contribution at this bounce
+		double diff = MAX(0.0, hit.normal.dot(scene.sun_dir));
+		vec3 emitted = hit.color * (0.15 + 0.85 * diff);
+		pixel = pixel + ray_intensity * emitted;  // accumulate
+
+		// diffuse albedo: tints reflected light
+		ray_intensity = ray_intensity * hit.color;
+
+		// updates ray with direct reflection
+		vec3 reflected = bounce_ray.dir - hit.normal * 2.0 * bounce_ray.dir.dot(hit.normal);
+		bounce_ray = Ray(hit.point, reflected);
+
+		// intensity cutoff to stop at a point
+		if (ray_intensity.length() < 0.02) break;
+	}
+
+	// write to image
+	buf[i] = pixel;
 }
