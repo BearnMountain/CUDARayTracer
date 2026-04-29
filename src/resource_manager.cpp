@@ -1,11 +1,12 @@
-#include "resource_manager.h"
-#include "stb_image_write.h"
 #include <stdint.h>
 #include <stdio.h>
-#include "obj.h"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+
+#include "obj.h"
+#include "resource_manager.h"
+#include "stb_image_write.h"
 
 void read_scene_file(const char* path, std::vector<Sphere>& spheres, std::vector<vec3>& lights) {
     std::ifstream istr(path);

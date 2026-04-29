@@ -21,11 +21,12 @@ build/%.o: src/%.cpp | build
 
 # compile cuda
 build/%.o: src/%.cu | build
-	nvcc -O3 -c $< -o $@
+	nvcc -O3 -arch=sm_70 -c $< -o $@
 
 # create build dir
 build:
 	mkdir -p build
 
+# remove build folder
 clean:
 	rm -rf build
