@@ -65,7 +65,7 @@ bool BVH::intersect(const Ray& ray, Hit* out) const {
 				
 				vec3 point  = ray.at(t);
 				vec3 normal = (point - s.pos) / s.radius; // unit outward normal
-				best = {t, point, normal, s.color, si};
+				best = {point, normal, s.color, t};
 				found = true;
 
 				// shrink window — keeps only closest

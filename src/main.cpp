@@ -4,9 +4,8 @@
 #include <mpi.h>
 #include <assert.h>
 
-#include "resource_manager.h"
-#include "obj.h"
-#include "bvh.h"
+#include "scene.h"
+#include "stb_image_write.h"
 
 using ticks = unsigned long;
 static __inline__ ticks getticks(void) {
@@ -19,10 +18,7 @@ static __inline__ ticks getticks(void) {
     return (((unsigned long long)tbu0) << 32) | tbl;
 }
 
-// args
-u32 width;
-u32 height;
-u32 bounce_limit;
+void cpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height, Scene* scene, int bounce_limit);
 
 int main(int argc, char** argv) {
 
@@ -33,11 +29,10 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 
-	width = atoi(argv[1]);
-	height = atoi(argv[2]);
-	bounce_limit = atoi(argv[3]);
+	u32 width = atoi(argv[1]);
+	u32 height = atoi(argv[2]);
+	u32 bounce_limit = atoi(argv[3]);
 	char* file_path = argv[4];
-	double aspect_ratio = (double)width / (double)height;
 
 	/* initialize mpi */
 
@@ -69,20 +64,67 @@ int main(int argc, char** argv) {
 
 	/* load scene */
 
-	std::vector<Sphere> scene;
-	std::vector<vec3> lights;
-	read_scene_file(file_path, scene, lights);
+	Scene scene(file_path);
 
 	/* render my portion */
-	// todo(jqj): parallelize on cuda
 
+	// todo(jqj): parallelize on cuda
 	std::vector<vec3> image(rank == 0 ? total_pixels : pixels);
-	BVH bvh(scene);
-	vec3 camera{0,0,5};
+	cpu_render(image.data(), pixel_offset, pixels, width, height, &scene, bounce_limit);
+
+	/* gather and write image */
+
+	if (rank == 0) {
+
+		// grab data
+		MPI_Gather(MPI_IN_PLACE, pixels, MPI_VEC3, 
+				   image.data(), pixels, MPI_VEC3, 
+				   0, MPI_COMM_WORLD);
+
+		// write data to file
+
+		std::vector<uint8_t> rgb(width * height * 3);
+
+		for (int i = 0; i < width * height; i++) {
+			rgb[i * 3 + 0] = (uint8_t)(CLAMP(image[i].x, 0.0f, 1.0f) * 255.0f);
+			rgb[i * 3 + 1] = (uint8_t)(CLAMP(image[i].y, 0.0f, 1.0f) * 255.0f);
+			rgb[i * 3 + 2] = (uint8_t)(CLAMP(image[i].z, 0.0f, 1.0f) * 255.0f);
+		}
+
+		stbi_write_png(
+			"scene.png",
+			width,
+			height,
+			3,
+			rgb.data(),
+			width * 3
+		);
+
+	} else {
+		MPI_Gather(image.data(), pixels, MPI_VEC3, 
+				   NULL, pixels, MPI_VEC3, 
+				   0, MPI_COMM_WORLD);
+	}
+
+	/* end */
+
+	if (rank == 0) {
+		end = getticks();
+		printf("Wrote image in %lf seconds, using %d ranks\n", (double)(end - start) / (double)512000000.0, num_ranks);
+	}
+
+	MPI_Finalize();
+
+	return 0;
+}
+
+void cpu_render(vec3* buf, int starting_pixel, int pixels, int width, int height, Scene* scene, int bounce_limit) {
+
+	double aspect_ratio = (double)width / (double)height;
 
 	// iterate over all pixels in my portion
-	int x = pixel_offset % width;
-	int y = pixel_offset / width;
+	int x = starting_pixel % width;
+	int y = starting_pixel / width;
 	for (int i = 0; i < pixels; ++i) {
 
 		assert(x < width && y < height);
@@ -91,7 +133,7 @@ int main(int argc, char** argv) {
 		double u = (x + 0.5) / width * 2.0 - 1.0;
 		double v = -((y + 0.5) / height * 2.0 - 1.0); // flip image rightside up
 
-		Ray ray(camera, vec3{u * aspect_ratio, v, -1.0});
+		Ray ray(scene->get_cam_pos(), vec3{u * aspect_ratio, v, -1.0});
 		vec3 pixel{0,0,0};
 		vec3 ray_intensity{1,1,1};
 		Ray bounce_ray = ray;
@@ -99,7 +141,7 @@ int main(int argc, char** argv) {
 		for (int b = 0; b < bounce_limit; ++b) {
 
 			Hit hit;
-			bool did_hit = bvh.intersect(bounce_ray, &hit);
+			bool did_hit = scene->intersect(bounce_ray, &hit);
 
 			if (!did_hit) {
 				// misses objects, sky color
@@ -109,7 +151,7 @@ int main(int argc, char** argv) {
 			}
 			
 			// Direct light contribution at this bounce
-			double diff = std::max(0.0, hit.normal.dot(lights.front()));
+			double diff = std::max(0.0, hit.normal.dot(scene->get_sun_dir()));
 			vec3 emitted = hit.color * (0.15 + 0.85 * diff);
 			pixel = pixel + ray_intensity * emitted;  // accumulate
 
@@ -125,7 +167,7 @@ int main(int argc, char** argv) {
 		}
 
 		// creates image based off ray direction
-		image[i] = pixel;
+		buf[i] = pixel;
 
 		// increment coordinates
 		++x;
@@ -135,29 +177,4 @@ int main(int argc, char** argv) {
 			++y;
 		}
 	}
-
-	/* gather and write image */
-	if (rank == 0) {
-		MPI_Gather(MPI_IN_PLACE, pixels, MPI_VEC3, 
-				   image.data(), pixels, MPI_VEC3, 
-				   0, MPI_COMM_WORLD);
-	} else {
-		MPI_Gather(image.data(), pixels, MPI_VEC3, 
-				   NULL, pixels, MPI_VEC3, 
-				   0, MPI_COMM_WORLD);
-	}
-
-	// todo(jqj): maybe don't use vec for color
-	if (rank == 0) write_image(image, width, height);
-
-	/* end */
-
-	if (rank == 0) {
-		end = getticks();
-		printf("Wrote image in %lf seconds, using %d ranks\n", (double)(end - start) / (double)512000000.0, num_ranks);
-	}
-
-	MPI_Finalize();
-
-	return 0;
 }

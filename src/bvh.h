@@ -1,12 +1,59 @@
 #ifndef BVH_H_
 #define BVH_H_
 
-#include "obj.h"
 #include <numeric>
 #include <vector>
 #include <algorithm>
 #include <optional>
 #include <array>
+
+#include "util.h"
+
+struct AABB {
+    vec3 min{ 
+		std::numeric_limits<double>::max(),
+		std::numeric_limits<double>::max(),
+		std::numeric_limits<double>::max() 
+	};
+
+    vec3 max{ 
+		std::numeric_limits<double>::lowest(),
+		std::numeric_limits<double>::lowest(),
+		std::numeric_limits<double>::lowest() 
+	};
+
+    // only spheres, grow to enclose them
+    void expand(const Sphere& s) { vec3 r{s.radius, s.radius, s.radius}; min = vec3::min(min, s.pos - r); max = vec3::max(max, s.pos + r); }
+    void expand(const AABB& o) { min = vec3::min(min, o.min); max = vec3::max(max, o.max); }
+
+    vec3 center() const { return (min + max) / 2.0; }
+    vec3 extent() const { return max - min; }
+    double surface_area() const {
+        vec3 e = extent();
+        return 2.0 * (e.x*e.y + e.y*e.z + e.z*e.x);
+    }
+    int longest_axis() const {
+        vec3 e = extent();
+        if (e.x >= e.y && e.x >= e.z) return 0;
+        if (e.y >= e.z) return 1;
+        return 2;
+    }
+
+    // returns true if ray hits in [t_min, t_max]
+	// SLAB TEST: https://tavianator.com/2022/ray_box_boundary.html
+    bool intersect(const Ray& ray, double t_min, double t_max) const {
+        for (int i = 0; i < 3; ++i) {
+            double inv = ray.inverse_dir[i];
+            double t0  = (min[i] - ray.origin[i]) * inv;
+            double t1  = (max[i] - ray.origin[i]) * inv;
+            if (inv < 0.0) std::swap(t0, t1);
+            t_min = std::max(t_min, t0);
+            t_max = std::min(t_max, t1);
+            if (t_max <= t_min) return false;
+        }
+        return true;
+    }
+};
 
 class BVH {
 public:
